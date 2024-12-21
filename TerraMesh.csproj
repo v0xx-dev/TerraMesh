@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Nullable>enable</Nullable>
+    <DefineConstants>USE_Z, USE_UV</DefineConstants>
+	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <PropertyGroup>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>embedded</DebugType>
+        <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))=./</PathMap>
+    </PropertyGroup>
+    
+  <ItemGroup>
+	  <Reference Include="UnityEditor" HintPath="C:\Program Files\Unity 2022.3.9f1\Editor\Data\Managed\UnityEditor.dll" />
+	  <Reference Include="UnityEngine" HintPath="C:\Program Files\Unity 2022.3.9f1\Editor\Data\Managed\UnityEngine.dll" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
