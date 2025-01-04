@@ -1491,6 +1491,11 @@ namespace TerraMesh
             this.copyTrees = copyTrees;
             this.copyDetail = copyDetail;
             this.terraMeshShader = terraMeshShader == null ? TerraMeshPlugin.terraMeshShader : terraMeshShader;
+
+            if (this.terraMeshShader == null)
+            {
+                Debug.LogError("TerraMesh shader not found. This will cause the mesh terrain to have broken visuals.");
+            }
         }
     }
 }
