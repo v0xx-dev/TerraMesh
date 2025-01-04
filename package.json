@@ -1,0 +1,23 @@
+{
+  "name": "com.github.voxx.terramesh",
+  "version": "1.1.0",
+  "displayName": "TerraMesh",
+  "description": "Tool to convert Unity Terrain objects to mesh",
+  "documentationUrl": "https://github.com/v0xx-dev/TerraMesh/blob/dev/README.md",
+  "changelogUrl": "https://github.com/v0xx-dev/TerraMesh/blob/dev/CHANGELOG.md",
+  "licensesUrl": "https://github.com/v0xx-dev/TerraMesh/blob/dev/LICENSE.md",
+  "keywords": [
+    "unity",
+    "terrain",
+    "mesh",
+    "terramesh",
+    "terraintomesh"
+  ],
+  "author": {
+    "name": "voxx",
+    "email": "duxyoqv0x@mozmail.com",
+    "url": "https://github.com/v0xx-dev"
+  },
+  "dependencies": {
+  }
+}
