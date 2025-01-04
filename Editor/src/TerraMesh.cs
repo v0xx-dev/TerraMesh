@@ -79,8 +79,8 @@ namespace TerraMesh
                 refineMesh = EditorGUILayout.Toggle("Refine Mesh", refineMesh);
             }
             EditorGUILayout.LabelField("Copy Settings", EditorStyles.boldLabel);
+            useMeshCollider = EditorGUILayout.Toggle("Mesh Collider", useMeshCollider);
             carveHoles = EditorGUILayout.Toggle("Carve Holes", carveHoles);
-            useMeshCollider = EditorGUILayout.Toggle("Generate a mesh collider", useMeshCollider);
             copyTrees = EditorGUILayout.Toggle("Copy Trees", copyTrees);
             //copyDetail = EditorGUILayout.Toggle("Copy Detail", copyDetail);
 
@@ -1022,8 +1022,8 @@ namespace TerraMesh
             terrain.drawHeightmap = false;
             // terrain.drawInstanced = false; // TODO: Check if this is necessary
 
-            //We have to copy the trees if we want to use the mesh collider, no way to disable only the tree colliders at runtime
-            if (config.copyTrees || config.useMeshCollider)
+            //Ideally trees should be copied if we want to use a mesh collider
+            if (config.copyTrees)
             {
                 //Disable rendering of trees on terrain
                 terrain.treeDistance = 0;
