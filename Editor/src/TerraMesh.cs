@@ -20,8 +20,9 @@ namespace TerraMesh
     public class TerraMesh : EditorWindow
     {
         private Terrain terrain;
-        private bool refineMesh = false;
-        private bool carveHoles = false;
+        private bool refineMesh = true;
+        private bool carveHoles = true;
+        private bool useMeshCollider = true;
         private bool copyTrees = false;
         private bool copyDetail = false;
         
@@ -79,6 +80,7 @@ namespace TerraMesh
             }
             EditorGUILayout.LabelField("Copy Settings", EditorStyles.boldLabel);
             carveHoles = EditorGUILayout.Toggle("Carve Holes", carveHoles);
+            useMeshCollider = EditorGUILayout.Toggle("Generate a mesh collider", useMeshCollider);
             copyTrees = EditorGUILayout.Toggle("Copy Trees", copyTrees);
             //copyDetail = EditorGUILayout.Toggle("Copy Detail", copyDetail);
 
@@ -108,6 +110,7 @@ namespace TerraMesh
 
                     TerraMeshConfig config = new TerraMeshConfig(
                         levelBounds : levelBounds?.bounds,
+                        useMeshCollider : useMeshCollider,
                         targetVertexCount : targetVertexCount,
                         minMeshStep : minMeshStep,
                         maxMeshStep : maxMeshStep,
