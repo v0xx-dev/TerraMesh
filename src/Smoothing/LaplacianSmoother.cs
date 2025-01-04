@@ -43,10 +43,10 @@ namespace TriangleNet.Smoothing
 
                         float _x = 0;
                         float _y = 0;
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                         float _z = 0;
 #endif
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
                         Vector2 _uv = Vector2.zero;
 #endif
                         int count = 0;
@@ -58,10 +58,10 @@ namespace TriangleNet.Smoothing
                             {
                                 _x += neighbor.x;
                                 _y += neighbor.y;
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
                                 _uv += neighbor.UV;
 #endif
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                                 if (smoothZ)
                                 {
                                     _z += neighbor.z;
@@ -79,13 +79,13 @@ namespace TriangleNet.Smoothing
                         {
                             vertex.x = (1-lambda)*vertex.x +  lambda* _x / count;
                             vertex.y = (1-lambda)*vertex.y +  lambda* _y / count;
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                             if (smoothZ)
                             {
                                 vertex.z = (1-lambda)*vertex.z +  lambda* _z / count;
                             }
 #endif
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
                             vertex.UV = (1-lambda)*vertex.UV +  lambda* _uv / count;
 #endif
                         }

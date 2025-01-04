@@ -57,7 +57,7 @@ namespace TriangleNet.Tools
         }
 #endif
 
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
         /// <summary>
         /// Linear interpolation of a scalar value.
         /// </summary>
@@ -102,7 +102,7 @@ namespace TriangleNet.Tools
         }
 #endif
 
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
         /// <summary>
         /// Linear interpolation of a 2D scalar value.
         /// </summary>

@@ -629,10 +629,10 @@ namespace TriangleNet.Meshing
                             + split * (edest.attributes[i] - eorg.attributes[i]);
                     }
 #endif
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                     newvertex.z = eorg.z + split * (edest.z - eorg.z);
 #endif
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
                     newvertex.uv = eorg.uv + split * (edest.uv - eorg.uv);
 #endif
                     if (!Behavior.NoExact)
@@ -801,10 +801,10 @@ namespace TriangleNet.Meshing
                             Interpolation.InterpolateAttributes(newvertex, newvertex.tri.tri, mesh.nextras);
                         }
 #endif
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                         Interpolation.InterpolateZ(newvertex, newvertex.tri.tri);
 #endif
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
                         Interpolation.InterpolateUV(newvertex, newvertex.tri.tri);
 #endif
                         _TriangleNetMesh.vertices.Add(newvertex.hash, newvertex);

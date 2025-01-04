@@ -719,10 +719,10 @@ namespace TriangleNet.Meshing
                 newvertex.attributes[i] = torg.attributes[i] + split * (tdest.attributes[i] - torg.attributes[i]);
             }
 #endif
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
             newvertex.z = torg.z + split * (tdest.z - torg.z);
 #endif
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
             newvertex.uv = torg.uv + split * (tdest.uv - torg.uv);
 #endif
 

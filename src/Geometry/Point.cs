@@ -14,7 +14,7 @@ namespace TriangleNet.Geometry
     /// <summary>
     /// Represents a 2D point.
     /// </summary>
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
     [DebuggerDisplay("ID {ID} [{X}, {Y}, {Z}]")]
 #else
     [DebuggerDisplay("ID {ID} [{X}, {Y}]")]
@@ -26,11 +26,11 @@ namespace TriangleNet.Geometry
 
         internal float x;
         internal float y;
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
         internal float z;
 #endif
 
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
         internal Vector2 uv;
 #endif
 
@@ -80,7 +80,7 @@ namespace TriangleNet.Geometry
             set { this.y = value; }
         }
 
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
         /// <summary>
         /// Gets or sets the vertex z coordinate.
         /// </summary>
@@ -91,7 +91,7 @@ namespace TriangleNet.Geometry
         }
 #endif
 
-#if USE_UV
+#if USE_UV || UNITY_EDITOR
         /// <summary>
         /// Gets or sets the vertex uv coordinate.
         /// </summary>

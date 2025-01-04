@@ -79,21 +79,21 @@ namespace TriangleNet.Unity
                 if (upAxis == 0)
                 {
                     vertex = new Vertex(vec.y, vec.z); // X up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                     vertex.Z = vec.x;
 #endif
                 }
                 else if (upAxis == 1)
                 {
                     vertex = new Vertex(vec.x, vec.z); // Y up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                     vertex.Z = vec.y;
 #endif
                 }
                 else if (upAxis == 2)
                 {
                     vertex = new Vertex(vec.x, vec.y); // Z up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                     vertex.Z = vec.z;
 #endif
                 }    
@@ -112,21 +112,21 @@ namespace TriangleNet.Unity
             if (upAxis == 0)
             {
                 vertex = new Vertex(point.y, point.z); // X up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                 vertex.Z = point.x;
 #endif
             }
             else if (upAxis == 1)
             {
                 vertex = new Vertex(point.x, point.z); // Y up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                 vertex.Z = point.y;
 #endif
             }
             else if (upAxis == 2)
             {
                 vertex = new Vertex(point.x, point.y); // Z up
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
                 vertex.Z = point.z;
 #endif
             }    
@@ -136,7 +136,7 @@ namespace TriangleNet.Unity
             return vertex;
         }
 
-#if USE_UV
+#if USE_UV || UNITY_EDITOR || UNITY_EDITOR || UNITY_EDITOR
         public static Vertex ToTriangleNetVertex(this Vector3 point, Vector2 uv, int upAxis = 2)
         {
             Vertex vertex;
@@ -147,7 +147,7 @@ namespace TriangleNet.Unity
         }
 #endif
 
-#if USE_Z
+#if USE_Z || UNITY_EDITOR
         public static Vector3 ToVector3(this Vertex vertex, int upAxis = 2)
         {
             Vector3 point;
