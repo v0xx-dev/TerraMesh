@@ -1,6 +1,8 @@
+using System.Reflection;
 using BepInEx;
 using BepInEx.Logging;
 using UnityEngine;
+using System.IO;
 
 namespace TerraMesh
 {
@@ -16,7 +18,9 @@ namespace TerraMesh
                 Instance = this;
                 StaticLogger = Logger; 
                 // Load the shader from an asset bundle
-                var assetBundle = AssetBundle.LoadFromFile(Paths.PluginPath + "/terramesh.assetbundle");
+                string dllPath = Assembly.GetExecutingAssembly().Location;
+                string bundlePath = Path.Combine(Path.GetDirectoryName(dllPath), "terramesh.assetbundle");
+                var assetBundle = AssetBundle.LoadFromFile(bundlePath);
                 terraMeshShader = assetBundle.LoadAsset<Shader>("MeshTerrainLit");
                 if (terraMeshShader == null)
                 {
