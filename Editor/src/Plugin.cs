@@ -6,7 +6,11 @@ using System.IO;
 
 namespace TerraMesh
 {
+#if UNITY_EDITOR
+    [BepInPlugin("voxx.TerraMesh", "voxx.TerraMesh", "1.0")]
+#else
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+#endif
     public class TerraMeshPlugin : BaseUnityPlugin
     {
         public static TerraMeshPlugin Instance;
@@ -26,15 +30,15 @@ namespace TerraMesh
                 {
                     Debug.LogError("Failed to load TerraMeshShader from asset bundle");
                 }
-                Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+                Logger.LogInfo($"Plugin is loaded!");
 
-        #if DEBUG
+#if DEBUG
                 // disable overhead of stack trace in dev build
                 Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
                 Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
                 Application.SetStackTraceLogType(LogType.Error, StackTraceLogType.None);
                 Application.SetStackTraceLogType(LogType.Assert, StackTraceLogType.None);
-        #endif
+#endif
         }
     }
 
