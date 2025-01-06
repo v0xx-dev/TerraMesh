@@ -19,18 +19,29 @@ namespace TerraMesh
 #if UNITY_EDITOR
     public class TerraMesh : EditorWindow
     {
+        [Tooltip("The Terrain object to convert to a mesh.")]
         private Terrain terrain;
+        [Tooltip("The BoxCollider object representing the level bounds.")]
+        private BoxCollider levelBounds;
+        [Tooltip("The minimum mesh step size. Smaller values result in higher resolution meshes.")]
+        private int minMeshStep = 1;
+        [Tooltip("The maximum mesh step size.")]
+        private int maxMeshStep = 16;
+        [Tooltip("How quickly the mesh step size transitions from min to max step size with distance from the level bounds.")]
+        private float falloffSpeed = 2f;
+        [Tooltip("Refine the mesh by subdividing thin triangles.")]
         private bool refineMesh = true;
-        private bool carveHoles = true;
+        [Tooltip("Use a mesh collider for the mesh terrain.")]
         private bool useMeshCollider = true;
+        [Tooltip("Carve holes in the mesh terrain.")]
+        private bool carveHoles = true;
+        [Tooltip("Copy trees from the terrain to the mesh terrain.")]
         private bool copyTrees = false;
         private bool copyDetail = false;
         
-        private BoxCollider levelBounds;
         private int targetVertexCount = -1;
-        private int minMeshStep = 1;
-        private int maxMeshStep = 16;
-        private float falloffSpeed = 2f;
+
+        
 
         private string saveFolderPath = "Assets/TerrainMeshes"; // Default save folder
         private GameObject meshTerrain;
