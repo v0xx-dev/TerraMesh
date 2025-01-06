@@ -786,52 +786,28 @@ namespace TerraMesh
                 throw new ArgumentNullException("terrain", "Terrain object cannot be null.");
             }
 
-            List<Vector3> vertices = new List<Vector3>();
-            List<Vector2> uvs = new List<Vector2>();
-            List<int> triangles = new List<int>();
+            MeshifyTerrainData meshTerrainData = new MeshifyTerrainData(terrain);
 
-            float terrainWidth = terrain.terrainData.size.x;
-            float terrainLength = terrain.terrainData.size.z;
-            float terrainHeight = terrain.terrainData.size.y;
+            GenerateMeshData(config, meshTerrainData);
 
-            int heightmapResolution = terrain.terrainData.heightmapResolution;
-            int holesResolution = terrain.terrainData.holesResolution;
+            GameObject meshTerrain = terrain.Meshify(config, meshTerrainData);
 
-            float[,] heights = terrain.terrainData.GetHeights(0, 0, heightmapResolution, heightmapResolution);
-            bool[,] holes = terrain.terrainData.GetHoles(0, 0, holesResolution, holesResolution);
+            return meshTerrain;
+        }
 
-            float terrainStepX = terrainWidth / (heightmapResolution - 1);
-            float terrainStepZ = terrainLength / (heightmapResolution - 1);
-
-            float uvStepX = 1.0f / (heightmapResolution - 1);
-            float uvStepZ = 1.0f / (heightmapResolution - 1);
-
-            GenerateMeshData(config,
-                ref vertices,
-                ref triangles,
-                ref uvs,
-                heights,
-                holes,
-                holesResolution,
-                heightmapResolution,
-                terrainStepX,
-                terrainStepZ,
-                terrainWidth,
-                terrainLength,
-                terrainHeight,
-                uvStepX,
-                uvStepZ,
-                terrain.transform.position,
-                terrain.terrainData.bounds
-            );
+        private static GameObject Meshify(this Terrain terrain, TerraMeshConfig config, MeshifyTerrainData meshTerrainData)
+        {
+            Vector3[] vertices = meshTerrainData.vertices.ToArray();
+            int[] triangles = meshTerrainData.triangles.ToArray(); 
+            Vector2[] uvs = meshTerrainData.uvs.ToArray();
 
             // Create mesh from sampled vertices and triangles
             Mesh mesh = new Mesh();
             mesh.name = "MeshTerrain_" + terrain.name;
-            mesh.indexFormat = vertices.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-            mesh.vertices = vertices.ToArray();
-            mesh.uv = uvs.ToArray();
-            mesh.triangles = triangles.ToArray();
+            mesh.indexFormat = vertices.Length > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = triangles;
             mesh.Optimize(); // Clean unused vertices
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
@@ -949,31 +925,16 @@ namespace TerraMesh
         }
 
         private static void GenerateMeshData(TerraMeshConfig config,
-                                                ref List<Vector3> vertices,
-                                                ref List<int> triangles,
-                                                ref List<Vector2> uvs,
-                                                float[,] heightmapData,
-                                                bool[,] holesData,
-                                                int holesResolution,
-                                                int heightmapResolution,
-                                                float terrainStepX,
-                                                float terrainStepZ,
-                                                float terrainWidth,
-                                                float terrainLength,
-                                                float terrainHeight,
-                                                float uvStepX,
-                                                float uvStepZ,
-                                                Vector3 terrainPosition,
-                                                Bounds terrainBounds)
+                                             MeshifyTerrainData terrainData)
         {
             // To avoid using terrainData methods, that are unavailable off the main thread
             float SampleHeightLocal(Vector3 pos)
             {
-                float heightmapX = (pos.x - terrainPosition.x) / terrainStepX;
-                float heightmapZ = (pos.z - terrainPosition.z) / terrainStepZ;
-                int x = Mathf.Clamp(Mathf.RoundToInt(heightmapX), 0, heightmapResolution - 1);
-                int z = Mathf.Clamp(Mathf.RoundToInt(heightmapZ), 0, heightmapResolution - 1);
-                return heightmapData[z, x] * terrainHeight; // TODO check if order z,x is correct here
+                float heightmapX = (pos.x - terrainData.terrainPosition.x) / terrainData.terrainStepX;
+                float heightmapZ = (pos.z - terrainData.terrainPosition.z) / terrainData.terrainStepZ;
+                int x = Mathf.Clamp(Mathf.RoundToInt(heightmapX), 0, terrainData.heightmapResolution - 1);
+                int z = Mathf.Clamp(Mathf.RoundToInt(heightmapZ), 0, terrainData.heightmapResolution - 1);
+                return terrainData.heightmapData[z, x] * terrainData.terrainHeight; // TODO check if order z,x is correct here
             }
 
             int actualCellStep;
@@ -982,8 +943,8 @@ namespace TerraMesh
 
             if (config.levelBounds != null) // Use the level bounds to determine the mesh density
             {
-                terrainBounds.center += terrainPosition;
-                float terrainSize = Mathf.Max(terrainBounds.extents.x, terrainBounds.extents.z);
+                terrainData.terrainBounds.center += terrainData.terrainPosition;
+                float terrainSize = Mathf.Max(terrainData.terrainBounds.extents.x, terrainData.terrainBounds.extents.z);
                 //Debug.LogDebug"Terrain center: " + terrainBounds.center + " Terrain Size: " + terrainSize);
 
                 Vector3 levelCenter = config.levelBounds.Value.center;
@@ -993,13 +954,13 @@ namespace TerraMesh
                 int minMeshStep = config.minMeshStep;
                 if (config.targetVertexCount > 0)
                 {
-                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(levelSize * levelSize / (terrainStepX * terrainStepZ * config.targetVertexCount)));
+                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(levelSize * levelSize / (terrainData.terrainStepX * terrainData.terrainStepZ * config.targetVertexCount)));
                 }
 
                 //Debug.LogDebug"Base Density Factor: " + minMeshStep);
 
-                QuadTree rootNode = new QuadTree(terrainBounds);
-                rootNode.Subdivide(config.levelBounds.Value, new Vector2(terrainStepX, terrainStepZ), minMeshStep,
+                QuadTree rootNode = new QuadTree(terrainData.terrainBounds);
+                rootNode.Subdivide(config.levelBounds.Value, new Vector2(terrainData.terrainStepX, terrainData.terrainStepZ), minMeshStep,
                                     config.maxMeshStep, config.falloffSpeed, terrainSize - levelSize);
 
                 // Generate vertices from 4 corners of leaf nodes of the quadtree
@@ -1022,21 +983,21 @@ namespace TerraMesh
                         if (uniqueVertices.Add(corner))
                         {
                             float height = SampleHeightLocal(corner);
-                            Vector3 vertex = new Vector3(corner.x - terrainPosition.x, height, corner.z - terrainPosition.z);
-                            vertices.Add(vertex);
+                            Vector3 vertex = new Vector3(corner.x - terrainData.terrainPosition.x, height, corner.z - terrainData.terrainPosition.z);
+                            terrainData.vertices.Add(vertex);
 
-                            Vector2 uv = new Vector2(vertex.x / terrainWidth, vertex.z / terrainLength);
-                            uvs.Add(uv);
+                            Vector2 uv = new Vector2(vertex.x / terrainData.terrainWidth, vertex.z / terrainData.terrainLength);
+                            terrainData.uvs.Add(uv);
 
                             if (config.carveHoles)
                             {
-                                int heightmapX = (int)((vertex.x) / terrainStepX);
-                                int heightmapZ = (int)((vertex.z) / terrainStepZ);
-                                heightmapX = Mathf.Clamp(heightmapX, 0, holesResolution - 1);
-                                heightmapZ = Mathf.Clamp(heightmapZ, 0, holesResolution - 1);
+                                int heightmapX = (int)((vertex.x) / terrainData.terrainStepX);
+                                int heightmapZ = (int)((vertex.z) / terrainData.terrainStepZ);
+                                heightmapX = Mathf.Clamp(heightmapX, 0, terrainData.holesResolution - 1);
+                                heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
 
                                 // Check if the vertex is inside a terrain hole
-                                if (!holesData[heightmapX, heightmapZ])
+                                if (!terrainData.holesData[heightmapX, heightmapZ])
                                 {
                                     holeVertices.Add(vertex);
                                 }
@@ -1045,18 +1006,18 @@ namespace TerraMesh
                     }
                 }
 
-                Debug.LogDebug("Sampled vertices: " + vertices.Count);
+                Debug.LogDebug("Sampled vertices: " + terrainData.vertices.Count);
 
                 var polygon = new Polygon();
 
-                for (int i = 0; i < vertices.Count; i++)
+                for (int i = 0; i < terrainData.vertices.Count; i++)
                 {
-                    Vertex triNetVertex = vertices[i].ToTriangleNetVertex(uvs[i], 1);
+                    Vertex triNetVertex = terrainData.vertices[i].ToTriangleNetVertex(terrainData.uvs[i], 1);
                     polygon.Add(triNetVertex);
                 }
 
                 // Configure triangulation options
-                int maxAdditionalVertices = Mathf.Min(vertices.Count / 4, 30000);
+                int maxAdditionalVertices = Mathf.Min(terrainData.vertices.Count / 4, 30000);
                 ConstraintOptions options = new ConstraintOptions() { ConformingDelaunay = false, SegmentSplitting = 2 };
                 QualityOptions quality = new QualityOptions() { MinimumAngle = 20.0f, SteinerPoints = config.refineMesh ? maxAdditionalVertices : 0 };
 
@@ -1069,9 +1030,9 @@ namespace TerraMesh
                 Debug.LogDebug("Final vertices: " + mesh2d.Vertices.Count);
 
                 // Convert the 2D mesh to Unity mesh
-                vertices = new List<Vector3>();
+                terrainData.vertices = new List<Vector3>();
                 Dictionary<int, int> vertexIDs = new Dictionary<int, int>();
-                uvs = new List<Vector2>();
+                terrainData.uvs = new List<Vector2>();
 
                 foreach (ITriangle triangle in mesh2d.Triangles)
                 {
@@ -1081,36 +1042,36 @@ namespace TerraMesh
 
                     if (!vertexIDs.ContainsKey(v0))
                     {
-                        vertexIDs[v0] = vertices.Count;
-                        vertices.Add(triangle.GetVertex(0).ToVector3(1));
-                        uvs.Add(triangle.GetVertex(0).UV);
+                        vertexIDs[v0] = terrainData.vertices.Count;
+                        terrainData.vertices.Add(triangle.GetVertex(0).ToVector3(1));
+                        terrainData.uvs.Add(triangle.GetVertex(0).UV);
                     }
                     if (!vertexIDs.ContainsKey(v1))
                     {
-                        vertexIDs[v1] = vertices.Count;
-                        vertices.Add(triangle.GetVertex(1).ToVector3(1));
-                        uvs.Add(triangle.GetVertex(1).UV);
+                        vertexIDs[v1] = terrainData.vertices.Count;
+                        terrainData.vertices.Add(triangle.GetVertex(1).ToVector3(1));
+                        terrainData.uvs.Add(triangle.GetVertex(1).UV);
                     }
                     if (!vertexIDs.ContainsKey(v2))
                     {
-                        vertexIDs[v2] = vertices.Count;
-                        vertices.Add(triangle.GetVertex(2).ToVector3(1));
-                        uvs.Add(triangle.GetVertex(2).UV);
+                        vertexIDs[v2] = terrainData.vertices.Count;
+                        terrainData.vertices.Add(triangle.GetVertex(2).ToVector3(1));
+                        terrainData.uvs.Add(triangle.GetVertex(2).UV);
                     }
 
                     if (config.carveHoles)
                     {
-                        if (holeVertices.Contains(vertices[vertexIDs[v0]]) ||
-                            holeVertices.Contains(vertices[vertexIDs[v1]]) ||
-                            holeVertices.Contains(vertices[vertexIDs[v2]]))
+                        if (holeVertices.Contains(terrainData.vertices[vertexIDs[v0]]) ||
+                            holeVertices.Contains(terrainData.vertices[vertexIDs[v1]]) ||
+                            holeVertices.Contains(terrainData.vertices[vertexIDs[v2]]))
                         {
                             continue;
                         }
                     }
 
-                    triangles.Add(vertexIDs[v0]);
-                    triangles.Add(vertexIDs[v2]);
-                    triangles.Add(vertexIDs[v1]);
+                    terrainData.triangles.Add(vertexIDs[v0]);
+                    terrainData.triangles.Add(vertexIDs[v2]);
+                    terrainData.triangles.Add(vertexIDs[v1]);
                 }
             }
             else // Uniform meshing if no level bounds are set
@@ -1119,15 +1080,15 @@ namespace TerraMesh
                 // Calculate density factor to achieve target vertex count
                 if (config.targetVertexCount > 0)
                 {
-                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(heightmapResolution * heightmapResolution / config.targetVertexCount));
+                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(terrainData.heightmapResolution * terrainData.heightmapResolution / config.targetVertexCount));
                 }
 
                 actualCellStep = Mathf.Max(minMeshStep, 1);
                 //Debug.LogDebug"Density Factor: " + actualCellStep);
 
                 // Calculate grid dimensions after applying density factor
-                int gridWidth = Mathf.FloorToInt(heightmapResolution / actualCellStep);
-                int gridHeight = Mathf.FloorToInt(heightmapResolution / actualCellStep);
+                int gridWidth = Mathf.FloorToInt(terrainData.heightmapResolution / actualCellStep);
+                int gridHeight = Mathf.FloorToInt(terrainData.heightmapResolution / actualCellStep);
 
                 // Generate vertices
                 for (int z = 0; z <= gridHeight; z++)
@@ -1139,23 +1100,23 @@ namespace TerraMesh
                         int heightmapZ = z * actualCellStep;
 
                         // Clamp to prevent accessing outside heightmap bounds
-                        heightmapX = Mathf.Min(heightmapX, heightmapResolution - 1);
-                        heightmapZ = Mathf.Min(heightmapZ, heightmapResolution - 1);
+                        heightmapX = Mathf.Min(heightmapX, terrainData.heightmapResolution - 1);
+                        heightmapZ = Mathf.Min(heightmapZ, terrainData.heightmapResolution - 1);
 
-                        float height = heightmapData[heightmapZ, heightmapX] * terrainHeight; // TODO check if order z,x is correct here
-                        Vector3 vertex = new Vector3(heightmapX * terrainStepX, height, heightmapZ * terrainStepZ);
-                        vertices.Add(vertex);
+                        float height = terrainData.heightmapData[heightmapZ, heightmapX] * terrainData.terrainHeight; // TODO check if order z,x is correct here
+                        Vector3 vertex = new Vector3(heightmapX * terrainData.terrainStepX, height, heightmapZ * terrainData.terrainStepZ);
+                        terrainData.vertices.Add(vertex);
 
-                        Vector2 uv = new Vector2(heightmapX * uvStepX, heightmapZ * uvStepZ);
-                        uvs.Add(uv);
+                        Vector2 uv = new Vector2(heightmapX * terrainData.uvStepX, heightmapZ * terrainData.uvStepZ);
+                        terrainData.uvs.Add(uv);
 
                         if (config.carveHoles)
                         {
-                            heightmapX = Mathf.Clamp(heightmapX, 0, holesResolution - 1);
-                            heightmapZ = Mathf.Clamp(heightmapZ, 0, holesResolution - 1);
+                            heightmapX = Mathf.Clamp(heightmapX, 0, terrainData.holesResolution - 1);
+                            heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
 
                             // Check if the vertex is inside a terrain hole
-                            if (!holesData[heightmapX, heightmapZ])
+                            if (!terrainData.holesData[heightmapX, heightmapZ])
                             {
                                 holeVertices.Add(vertex);
                             }
@@ -1163,7 +1124,7 @@ namespace TerraMesh
                     }
                 }
 
-                Debug.LogDebug("Sampled vertices: " + vertices.Count);
+                Debug.LogDebug("Sampled vertices: " + terrainData.vertices.Count);
 
                 // Generate triangles using grid coordinates
                 for (int z = 0; z < gridHeight; z++)
@@ -1175,24 +1136,24 @@ namespace TerraMesh
 
                         if (config.carveHoles)
                         {
-                            if (holeVertices.Contains(vertices[vertexIndex]) ||
-                                holeVertices.Contains(vertices[vertexIndex + 1]) ||
-                                holeVertices.Contains(vertices[vertexIndex + (gridWidth + 1)]) ||
-                                holeVertices.Contains(vertices[vertexIndex + (gridWidth + 1) + 1]))
+                            if (holeVertices.Contains(terrainData.vertices[vertexIndex]) ||
+                                holeVertices.Contains(terrainData.vertices[vertexIndex + 1]) ||
+                                holeVertices.Contains(terrainData.vertices[vertexIndex + (gridWidth + 1)]) ||
+                                holeVertices.Contains(terrainData.vertices[vertexIndex + (gridWidth + 1) + 1]))
                             {
                                 continue;
                             }
                         }
 
                         // First triangle
-                        triangles.Add(vertexIndex);                     // Current vertex
-                        triangles.Add(vertexIndex + (gridWidth + 1));   // Vertex below
-                        triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
+                        terrainData.triangles.Add(vertexIndex);                     // Current vertex
+                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1));   // Vertex below
+                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
 
                         // Second triangle
-                        triangles.Add(vertexIndex);                     // Current vertex
-                        triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
-                        triangles.Add(vertexIndex + 1);                 // Vertex to the right
+                        terrainData.triangles.Add(vertexIndex);                     // Current vertex
+                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
+                        terrainData.triangles.Add(vertexIndex + 1);                 // Vertex to the right
                     }
                 }
             }
@@ -1588,6 +1549,84 @@ namespace TerraMesh
             {
                 Debug.LogError("TerraMesh shader not found. This will cause the mesh terrain to have broken visuals.");
             }
+        }
+    }
+
+    [Serializable]
+    public class MeshifyTerrainData
+    {
+        public float[,] heightmapData;
+        public bool[,] holesData;
+        public int holesResolution;
+        public int heightmapResolution;
+        public float terrainStepX;
+        public float terrainStepZ;
+        public float terrainWidth;
+        public float terrainLength;
+        public float terrainHeight;
+        public float uvStepX;
+        public float uvStepZ;
+        public Vector3 terrainPosition;
+        public Bounds terrainBounds;
+
+        public List<Vector3> vertices;
+        public List<int> triangles;
+        public List<Vector2> uvs;
+
+        public MeshifyTerrainData(Terrain terrain)
+        {
+            GatherTerrainData(terrain,
+                                out heightmapData,
+                                out holesData,
+                                out holesResolution,
+                                out heightmapResolution,
+                                out terrainStepX,
+                                out terrainStepZ,
+                                out terrainWidth,
+                                out terrainLength,
+                                out terrainHeight,
+                                out uvStepX,
+                                out uvStepZ,
+                                out terrainPosition,
+                                out terrainBounds);
+
+            vertices = new List<Vector3>();
+            triangles = new List<int>();
+            uvs = new List<Vector2>();
+        }
+
+        private void GatherTerrainData(Terrain terrain,
+                                            out float[,] heightmapData,
+                                            out bool[,] holesData,
+                                            out int holesResolution,
+                                            out int heightmapResolution,
+                                            out float terrainStepX,
+                                            out float terrainStepZ,
+                                            out float terrainWidth,
+                                            out float terrainLength,
+                                            out float terrainHeight,
+                                            out float uvStepX,
+                                            out float uvStepZ,
+                                            out Vector3 terrainPosition,
+                                            out Bounds terrainBounds)
+        {
+            heightmapData = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
+            holesData = terrain.terrainData.GetHoles(0, 0, terrain.terrainData.holesResolution, terrain.terrainData.holesResolution);
+            holesResolution = terrain.terrainData.holesResolution;
+            heightmapResolution = terrain.terrainData.heightmapResolution;
+
+            terrainStepX = terrain.terrainData.size.x / (heightmapResolution - 1);
+            terrainStepZ = terrain.terrainData.size.z / (heightmapResolution - 1);
+
+            terrainWidth = terrain.terrainData.size.x;
+            terrainLength = terrain.terrainData.size.z;
+            terrainHeight = terrain.terrainData.size.y;
+
+            uvStepX = 1.0f / (heightmapResolution - 1);
+            uvStepZ = 1.0f / (heightmapResolution - 1);
+
+            terrainPosition = terrain.transform.position;
+            terrainBounds = terrain.terrainData.bounds;
         }
     }
 }
