@@ -183,19 +183,21 @@ namespace TerraMesh
         {
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
-            if (meshTerrainObject == null || config.levelBounds == null)
-            {
-                Debug.LogError("Object to modify and level bounds must be supplied.");
-                return;
-            }
-            Bounds levelBounds = config.levelBounds.Value;
-
             MeshFilter? meshFilter = meshTerrainObject!.GetComponent<MeshFilter>();
             MeshCollider? meshCollider = meshTerrainObject.GetComponent<MeshCollider>();
+            MeshRenderer? meshRenderer = meshTerrainObject.GetComponent<MeshRenderer>();
+            
+            Bounds levelBounds = config.levelBounds.HasValue ? config.levelBounds.Value : meshRenderer?.bounds ?? default;
 
             if (meshFilter == null || meshCollider == null)
             {
                 Debug.LogError("MeshFilter and MeshCollider components must be present on the object to modify.");
+            }
+
+            if (levelBounds == default)
+            {
+                Debug.LogError("Level bounds must be set to postprocess the mesh terrain. Either set the level bounds in the TerraMeshConfig or ensure the MeshRenderer component is present on the object.");
+                return;
             }
 
             Mesh originalMesh = meshFilter!.sharedMesh;
@@ -265,6 +267,8 @@ namespace TerraMesh
 
             // Get the original mesh data
             Vector3[] vertices = newMesh.vertices;
+            Vector2[] uvs = newMesh.uv;
+            Vector2[] uvs2 = new Vector2[0];
             int[] triangles = newMesh.triangles;
 
             //Calculate max scale only taking the absolute horizontal scales into account, horizontal is everything not on the height axis
@@ -272,6 +276,33 @@ namespace TerraMesh
             float maxEdgeLength = config.baseEdgeLength / maxScale;
             Debug.LogDebug("Max scale: " + maxScale + " Max edge length: " + maxEdgeLength + "m");
 
+            BeautifyMeshData(config, ref vertices, ref triangles, ref uvs, ref uvs2, maxEdgeLength, heightAxis, objectSpaceBounds, sw);
+
+            newMesh.vertices = vertices;
+            newMesh.triangles = triangles;
+            newMesh.uv = uvs;
+            newMesh.uv2 = uvs2;
+
+            newMesh.Optimize();
+            newMesh.RecalculateNormals();
+            newMesh.RecalculateTangents();
+            newMesh.RecalculateBounds();
+
+            meshFilter.sharedMesh = newMesh;
+            meshCollider!.sharedMesh = newMesh;
+        }
+
+        private static void BeautifyMeshData(
+                                            TerraMeshConfig config,
+                                            ref Vector3[] vertices,
+                                            ref int[] triangles,
+                                            ref Vector2[] uvs,
+                                            ref Vector2[] uvs2,
+                                            float maxEdgeLength,
+                                            int heightAxis,
+                                            Bounds objectSpaceBounds,
+                                            System.Diagnostics.Stopwatch sw)
+        {
             // Create lists to store vertices and triangles within bounds
             HashSet<int> vertexIndicesInBounds = new HashSet<int>();
             Queue<(int, int, int)> trianglesToRefine = new Queue<(int, int, int)>();
@@ -334,7 +365,7 @@ namespace TerraMesh
 
             // Allow addition of new vertices
             List<Vector3> newVertices = new List<Vector3>(vertices);
-            List<Vector2> newUVs = new List<Vector2>(newMesh.uv);
+            List<Vector2> newUVs = new List<Vector2>(uvs);
 
             // Refine triangles
             if (config.subdivideMesh)
@@ -526,28 +557,21 @@ namespace TerraMesh
 
             }
 
-            Debug.LogDebug("Original UVs: " + newMesh.uv.Length + " New UVs: " + newUVs.Count);
+            Debug.LogDebug("Original UVs: " + uvs.Length + " New UVs: " + newUVs.Count);
             Debug.LogDebug("Original vertices: " + vertices.Length + " New vertices: " + newVertices.Count);
 
-            newMesh.vertices = newVertices.ToArray();
-            newMesh.triangles = newTriangles.ToArray();
-            newMesh.uv2 = UnwrapUVs(newMesh.vertices, heightAxis, true);
+            vertices = newVertices.ToArray();
+            triangles = newTriangles.ToArray();
+            uvs2 = UnwrapUVs(vertices, heightAxis, true);
+            
             if (config.replaceUvs)
             {
-                newMesh.uv = newMesh.uv2; // Replace UVs with unwrapped UVs (only acceptable on moons with no splatmaps)
+                uvs = uvs2.ToArray(); // Replace UVs with unwrapped UVs (only acceptable on moons with no splatmaps)
             }
             else
             {
-                newMesh.uv = newUVs.ToArray(); // use original interpolated UVs
+                uvs = newUVs.ToArray();
             }
-
-            newMesh.Optimize();
-            newMesh.RecalculateNormals();
-            newMesh.RecalculateTangents();
-            newMesh.RecalculateBounds();
-
-            meshFilter.sharedMesh = newMesh;
-            meshCollider!.sharedMesh = newMesh;
         }
 
         private static Vector2[] UnwrapUVs(Vector3[] vertices, int upAxis, bool normalize)
@@ -743,39 +767,203 @@ namespace TerraMesh
         /// The mesh terrain is created by sampling the terrain heightmap and converting it to a mesh.
         /// The mesh terrain is parented to the same GameObject as the Terrain object, and has the same layer, tag, and rendering layer mask.
         /// </remarks>
-        /// <exception cref="System.ArgumentNullException">Thrown if `terrain` or `config` is null.</exception>
-        /// <exception cref="System.ArgumentException">Thrown if `config` contains invalid parameters.</exception>
+        /// <exception cref="System.ArgumentNullException">Thrown if `terrain` is null.</exception>
         public static GameObject Meshify(this Terrain terrain, TerraMeshConfig config)
         {
-            GameObject meshTerrain = new GameObject("MeshTerrain_" + terrain.name);
-            MeshFilter meshFilter = meshTerrain.AddComponent<MeshFilter>();
-            MeshRenderer meshRenderer = meshTerrain.AddComponent<MeshRenderer>();
-            // Set same parent, rendering layer, rendering layer mask and tag as the terrain (and set the snow overlay custom pass layer)
-            meshRenderer.gameObject.layer = terrain.gameObject.layer;
-            meshRenderer.gameObject.tag = terrain.gameObject.tag;
-            meshTerrain.transform.SetParent(terrain.transform.parent);
-            terrain.renderingLayerMask |= config.renderingLayerMask;
-            meshRenderer.renderingLayerMask = terrain.renderingLayerMask;
-            meshTerrain.isStatic = true;
-
-            Mesh mesh = new Mesh();
-            mesh.name = "MeshTerrain_" + terrain.name;
+            if (terrain == null)
+            {
+                throw new ArgumentNullException("terrain", "Terrain object cannot be null.");
+            }
 
             List<Vector3> vertices = new List<Vector3>();
             List<Vector2> uvs = new List<Vector2>();
             List<int> triangles = new List<int>();
 
-            meshTerrain.transform.position = terrain.transform.position;
-
             float terrainWidth = terrain.terrainData.size.x;
             float terrainLength = terrain.terrainData.size.z;
             float terrainHeight = terrain.terrainData.size.y;
 
-            float terrainStepX = terrainWidth / (terrain.terrainData.heightmapResolution - 1);
-            float terrainStepZ = terrainLength / (terrain.terrainData.heightmapResolution - 1);
+            int heightmapResolution = terrain.terrainData.heightmapResolution;
+            int holesResolution = terrain.terrainData.holesResolution;
 
-            float uvStepX = 1.0f / (terrain.terrainData.heightmapResolution - 1);
-            float uvStepZ = 1.0f / (terrain.terrainData.heightmapResolution - 1);
+            float[,] heights = terrain.terrainData.GetHeights(0, 0, heightmapResolution, heightmapResolution);
+            bool[,] holes = terrain.terrainData.GetHoles(0, 0, holesResolution, holesResolution);
+
+            float terrainStepX = terrainWidth / (heightmapResolution - 1);
+            float terrainStepZ = terrainLength / (heightmapResolution - 1);
+
+            float uvStepX = 1.0f / (heightmapResolution - 1);
+            float uvStepZ = 1.0f / (heightmapResolution - 1);
+
+            GenerateMeshData(config,
+                ref vertices,
+                ref triangles,
+                ref uvs,
+                heights,
+                holes,
+                holesResolution,
+                heightmapResolution,
+                terrainStepX,
+                terrainStepZ,
+                terrainWidth,
+                terrainLength,
+                terrainHeight,
+                uvStepX,
+                uvStepZ,
+                terrain.transform.position,
+                terrain.terrainData.bounds
+            );
+
+            // Create mesh from sampled vertices and triangles
+            Mesh mesh = new Mesh();
+            mesh.name = "MeshTerrain_" + terrain.name;
+            mesh.indexFormat = vertices.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.vertices = vertices.ToArray();
+            mesh.uv = uvs.ToArray();
+            mesh.triangles = triangles.ToArray();
+            mesh.Optimize(); // Clean unused vertices
+            mesh.RecalculateBounds();
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+
+            // Create GameObject with MeshFilter and MeshRenderer components
+            GameObject meshTerrain = new GameObject("MeshTerrain_" + terrain.name);
+            MeshFilter meshFilter = meshTerrain.AddComponent<MeshFilter>();
+            MeshRenderer meshRenderer = meshTerrain.AddComponent<MeshRenderer>();
+            // Set same position, parent, rendering layer, rendering layer mask and tag as the terrain (and set the snow overlay custom pass layer)
+            meshTerrain.transform.position = terrain.transform.position;
+            meshTerrain.transform.SetParent(terrain.transform.parent);
+            meshRenderer.gameObject.layer = terrain.gameObject.layer;
+            meshRenderer.gameObject.tag = terrain.gameObject.tag;
+            terrain.renderingLayerMask |= config.renderingLayerMask;
+            meshRenderer.renderingLayerMask = terrain.renderingLayerMask;
+            meshTerrain.isStatic = true;
+
+            if (config.useMeshCollider)
+            {
+                MeshCollider meshCollider = meshTerrain.AddComponent<MeshCollider>();
+                meshCollider.sharedMesh = mesh;
+                // Disable terrain collider
+                terrain.GetComponent<TerrainCollider>().enabled = false;
+            }
+
+            meshFilter.mesh = mesh;
+            meshRenderer.sharedMaterial = new Material(config.terraMeshShader);
+            // Disable rendering of terrain
+            terrain.drawHeightmap = false;
+            // terrain.drawInstanced = false; // TODO: Check if this is necessary
+
+            //Ideally trees should be copied if we want to use a mesh collider
+            if (config.copyTrees)
+            {
+                //Disable rendering of trees on terrain
+                terrain.treeDistance = 0;
+                // Create Trees parent object
+                Transform treesParent = new GameObject("Trees").transform;
+                treesParent.position = meshTerrain.transform.position;
+                treesParent.parent = meshTerrain.transform;
+
+                // Copy trees to the mesh terrain
+                foreach (TreeInstance tree in terrain.terrainData.treeInstances)
+                {
+                    // Get tree prototype
+                    GameObject treePrototype = terrain.terrainData.treePrototypes[tree.prototypeIndex].prefab;
+
+                    // Instantiate tree
+                    GameObject newTree = GameObject.Instantiate(treePrototype, treesParent);
+
+                    // Calculate tree terrainPosition
+                    Vector3 treeWorldPos = Vector3.Scale(tree.position, terrain.terrainData.size) + terrain.transform.position;
+
+                    // Set tree transform
+                    newTree.transform.position = treeWorldPos;
+                    newTree.transform.localScale = new Vector3(tree.widthScale, tree.heightScale, tree.widthScale); // Assuming uniform width and length scale
+                    newTree.transform.rotation = Quaternion.Euler(0, tree.rotation * 180f / Mathf.PI, 0); // Convert rotation to degrees
+
+                    // Set to static
+                    newTree.isStatic = true;
+
+                    // Set rendering layers
+                    newTree.layer = LayerMask.GetMask("Terrain");
+                    if (newTree.TryGetComponent<MeshRenderer>(out MeshRenderer renderer))
+                    {
+                        renderer.renderingLayerMask |= config.renderingLayerMask;
+                    }
+                }
+            }
+
+            if (config.copyDetail)
+            {
+                Transform grassParent = new GameObject("Grass").transform;
+                grassParent.parent = meshTerrain.transform;
+
+                var terrainData = terrain.terrainData;
+                var scaleX = terrainData.size.x / terrainData.detailWidth;
+                var scaleZ = terrainData.size.z / terrainData.detailHeight;
+                Debug.LogDebug("Detail Prototypes: " + terrainData.detailPrototypes.Length);
+
+
+                for (int d = 0; d < terrainData.detailPrototypes.Length; d++)
+                {
+                    var detailPrototype = terrainData.detailPrototypes[d];
+                    var detailLayer = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, d);
+                    float targetDensity = detailPrototype.density;
+                    Debug.LogDebug("Target Coverage: " + detailPrototype.targetCoverage);
+                    for (int x = 0; x < terrainData.detailWidth; x++)
+                    {
+                        for (int y = 0; y < terrainData.detailHeight; y++)
+                        {
+                            var layerDensity = detailLayer[y, x] / 255f;
+                            float posX = x * scaleX + terrain.transform.position.x;
+                            float posZ = y * scaleZ + terrain.transform.position.z;
+                            float perlinNoise = Mathf.PerlinNoise(posX, posZ);
+                            if (perlinNoise * layerDensity * targetDensity > 0.9f)
+                            {
+                                //Debug.Log("Density factor: " + perlinNoise * layerDensity * targetDensity);
+                                var pos = new Vector3(posX, 0, posZ);
+                                pos.y = terrain.SampleHeight(pos);
+                                var detail = GameObject.Instantiate(terrainData.detailPrototypes[d].prototype, pos, Quaternion.Euler(0, UnityEngine.Random.Range(0, 359), 0), grassParent);
+
+                                var scale = UnityEngine.Random.Range(detailPrototype.minWidth, detailPrototype.maxWidth);
+                                var height = UnityEngine.Random.Range(detailPrototype.minHeight, detailPrototype.maxHeight);
+                                detail.transform.localScale = new Vector3(scale, height, scale);
+                            }
+
+                        }
+                    }
+                }
+            }
+
+            return meshTerrain;
+        }
+
+        private static void GenerateMeshData(TerraMeshConfig config,
+                                                ref List<Vector3> vertices,
+                                                ref List<int> triangles,
+                                                ref List<Vector2> uvs,
+                                                float[,] heightmapData,
+                                                bool[,] holesData,
+                                                int holesResolution,
+                                                int heightmapResolution,
+                                                float terrainStepX,
+                                                float terrainStepZ,
+                                                float terrainWidth,
+                                                float terrainLength,
+                                                float terrainHeight,
+                                                float uvStepX,
+                                                float uvStepZ,
+                                                Vector3 terrainPosition,
+                                                Bounds terrainBounds)
+        {
+            // To avoid using terrainData methods, that are unavailable off the main thread
+            float SampleHeightLocal(Vector3 pos)
+            {
+                float heightmapX = (pos.x - terrainPosition.x) / terrainStepX;
+                float heightmapZ = (pos.z - terrainPosition.z) / terrainStepZ;
+                int x = Mathf.Clamp(Mathf.RoundToInt(heightmapX), 0, heightmapResolution - 1);
+                int z = Mathf.Clamp(Mathf.RoundToInt(heightmapZ), 0, heightmapResolution - 1);
+                return heightmapData[z, x] * terrainHeight; // TODO check if order z,x is correct here
+            }
 
             int actualCellStep;
 
@@ -783,8 +971,7 @@ namespace TerraMesh
 
             if (config.levelBounds != null) // Use the level bounds to determine the mesh density
             {
-                Bounds terrainBounds = terrain.terrainData.bounds;
-                terrainBounds.center += terrain.transform.position;
+                terrainBounds.center += terrainPosition;
                 float terrainSize = Mathf.Max(terrainBounds.extents.x, terrainBounds.extents.z);
                 //Debug.LogDebug"Terrain center: " + terrainBounds.center + " Terrain Size: " + terrainSize);
 
@@ -823,8 +1010,8 @@ namespace TerraMesh
                     {
                         if (uniqueVertices.Add(corner))
                         {
-                            float height = terrain.SampleHeight(corner);
-                            Vector3 vertex = new Vector3(corner.x - terrain.transform.position.x, height, corner.z - terrain.transform.position.z);
+                            float height = SampleHeightLocal(corner);
+                            Vector3 vertex = new Vector3(corner.x - terrainPosition.x, height, corner.z - terrainPosition.z);
                             vertices.Add(vertex);
 
                             Vector2 uv = new Vector2(vertex.x / terrainWidth, vertex.z / terrainLength);
@@ -834,11 +1021,11 @@ namespace TerraMesh
                             {
                                 int heightmapX = (int)((vertex.x) / terrainStepX);
                                 int heightmapZ = (int)((vertex.z) / terrainStepZ);
-                                heightmapX = Mathf.Clamp(heightmapX, 0, terrain.terrainData.holesResolution - 1);
-                                heightmapZ = Mathf.Clamp(heightmapZ, 0, terrain.terrainData.holesResolution - 1);
+                                heightmapX = Mathf.Clamp(heightmapX, 0, holesResolution - 1);
+                                heightmapZ = Mathf.Clamp(heightmapZ, 0, holesResolution - 1);
 
                                 // Check if the vertex is inside a terrain hole
-                                if (!terrain.terrainData.GetHoles(heightmapX, heightmapZ, 1, 1)[0, 0])
+                                if (!holesData[heightmapX, heightmapZ])
                                 {
                                     holeVertices.Add(vertex);
                                 }
@@ -921,15 +1108,15 @@ namespace TerraMesh
                 // Calculate density factor to achieve target vertex count
                 if (config.targetVertexCount > 0)
                 {
-                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(terrain.terrainData.heightmapResolution * terrain.terrainData.heightmapResolution / config.targetVertexCount));
+                    minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(heightmapResolution * heightmapResolution / config.targetVertexCount));
                 }
 
                 actualCellStep = Mathf.Max(minMeshStep, 1);
                 //Debug.LogDebug"Density Factor: " + actualCellStep);
 
                 // Calculate grid dimensions after applying density factor
-                int gridWidth = Mathf.FloorToInt(terrain.terrainData.heightmapResolution / actualCellStep);
-                int gridHeight = Mathf.FloorToInt(terrain.terrainData.heightmapResolution / actualCellStep);
+                int gridWidth = Mathf.FloorToInt(heightmapResolution / actualCellStep);
+                int gridHeight = Mathf.FloorToInt(heightmapResolution / actualCellStep);
 
                 // Generate vertices
                 for (int z = 0; z <= gridHeight; z++)
@@ -941,10 +1128,10 @@ namespace TerraMesh
                         int heightmapZ = z * actualCellStep;
 
                         // Clamp to prevent accessing outside heightmap bounds
-                        heightmapX = Mathf.Min(heightmapX, terrain.terrainData.heightmapResolution - 1);
-                        heightmapZ = Mathf.Min(heightmapZ, terrain.terrainData.heightmapResolution - 1);
+                        heightmapX = Mathf.Min(heightmapX, heightmapResolution - 1);
+                        heightmapZ = Mathf.Min(heightmapZ, heightmapResolution - 1);
 
-                        float height = terrain.terrainData.GetHeight(heightmapX, heightmapZ);
+                        float height = heightmapData[heightmapZ, heightmapX] * terrainHeight; // TODO check if order z,x is correct here
                         Vector3 vertex = new Vector3(heightmapX * terrainStepX, height, heightmapZ * terrainStepZ);
                         vertices.Add(vertex);
 
@@ -953,11 +1140,11 @@ namespace TerraMesh
 
                         if (config.carveHoles)
                         {
-                            heightmapX = Mathf.Clamp(heightmapX, 0, terrain.terrainData.holesResolution - 1);
-                            heightmapZ = Mathf.Clamp(heightmapZ, 0, terrain.terrainData.holesResolution - 1);
+                            heightmapX = Mathf.Clamp(heightmapX, 0, holesResolution - 1);
+                            heightmapZ = Mathf.Clamp(heightmapZ, 0, holesResolution - 1);
 
                             // Check if the vertex is inside a terrain hole
-                            if (!terrain.terrainData.GetHoles(heightmapX, heightmapZ, 1, 1)[0, 0])
+                            if (!holesData[heightmapX, heightmapZ])
                             {
                                 holeVertices.Add(vertex);
                             }
@@ -998,112 +1185,6 @@ namespace TerraMesh
                     }
                 }
             }
-
-            mesh.indexFormat = vertices.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-            mesh.vertices = vertices.ToArray();
-            mesh.uv = uvs.ToArray();
-            mesh.triangles = triangles.ToArray();
-            mesh.Optimize(); // Clean unused vertices
-            mesh.RecalculateBounds();
-            mesh.RecalculateNormals();
-            mesh.RecalculateTangents();
-
-            if (config.useMeshCollider)
-            {
-                MeshCollider meshCollider = meshTerrain.AddComponent<MeshCollider>();
-                meshCollider.sharedMesh = mesh;
-                // Disable terrain collider
-                terrain.GetComponent<TerrainCollider>().enabled = false;
-            }
-
-            meshFilter.mesh = mesh;
-            meshRenderer.sharedMaterial = new Material(config.terraMeshShader);
-            // Disable rendering of terrain
-            terrain.drawHeightmap = false;
-            // terrain.drawInstanced = false; // TODO: Check if this is necessary
-
-            //Ideally trees should be copied if we want to use a mesh collider
-            if (config.copyTrees)
-            {
-                //Disable rendering of trees on terrain
-                terrain.treeDistance = 0;
-                // Create Trees parent object
-                Transform treesParent = new GameObject("Trees").transform;
-                treesParent.position = meshTerrain.transform.position;
-                treesParent.parent = meshTerrain.transform;
-
-                // Copy trees to the mesh terrain
-                foreach (TreeInstance tree in terrain.terrainData.treeInstances)
-                {
-                    // Get tree prototype
-                    GameObject treePrototype = terrain.terrainData.treePrototypes[tree.prototypeIndex].prefab;
-
-                    // Instantiate tree
-                    GameObject newTree = GameObject.Instantiate(treePrototype, treesParent);
-
-                    // Calculate tree position
-                    Vector3 treeWorldPos = Vector3.Scale(tree.position, terrain.terrainData.size) + terrain.transform.position;
-
-                    // Set tree transform
-                    newTree.transform.position = treeWorldPos;
-                    newTree.transform.localScale = new Vector3(tree.widthScale, tree.heightScale, tree.widthScale); // Assuming uniform width and length scale
-                    newTree.transform.rotation = Quaternion.Euler(0, tree.rotation * 180f / Mathf.PI, 0); // Convert rotation to degrees
-
-                    // Set to static
-                    newTree.isStatic = true;
-
-                    // Set rendering layers
-                    newTree.layer = LayerMask.GetMask("Terrain");
-                    if (newTree.TryGetComponent<MeshRenderer>(out MeshRenderer renderer))
-                    {
-                        renderer.renderingLayerMask |= config.renderingLayerMask;
-                    }
-                }
-            }
-
-            if (config.copyDetail)
-            {
-                Transform grassParent = new GameObject("Grass").transform;
-                grassParent.parent = meshTerrain.transform;
-
-                var terrainData = terrain.terrainData;
-                var scaleX = terrainData.size.x / terrainData.detailWidth;
-                var scaleZ = terrainData.size.z / terrainData.detailHeight;
-                Debug.LogDebug("Detail Prototypes: " + terrainData.detailPrototypes.Length);
-
-
-                for (int d = 0; d < terrainData.detailPrototypes.Length; d++)
-                {
-                    var detailPrototype = terrainData.detailPrototypes[d];
-                    var detailLayer = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, d);
-                    float targetDensity = detailPrototype.density;
-                    Debug.LogDebug("Target Coverage: " + detailPrototype.targetCoverage);
-                    for (int x = 0; x < terrainData.detailWidth; x++)
-                    {
-                        for (int y = 0; y < terrainData.detailHeight; y++)
-                        {
-                            var layerDensity = detailLayer[y, x] / 255f;
-                            float posX = x * scaleX + terrain.transform.position.x;
-                            float posZ = y * scaleZ + terrain.transform.position.z;
-                            float perlinNoise = Mathf.PerlinNoise(posX, posZ);
-                            if (perlinNoise * layerDensity * targetDensity > 0.9f)
-                            {
-                                //Debug.Log("Density factor: " + perlinNoise * layerDensity * targetDensity);
-                                var pos = new Vector3(posX, 0, posZ);
-                                pos.y = terrain.SampleHeight(pos);
-                                var detail = GameObject.Instantiate(terrainData.detailPrototypes[d].prototype, pos, Quaternion.Euler(0, UnityEngine.Random.Range(0, 359), 0), grassParent);
-
-                                var scale = UnityEngine.Random.Range(detailPrototype.minWidth, detailPrototype.maxWidth);
-                                var height = UnityEngine.Random.Range(detailPrototype.minHeight, detailPrototype.maxHeight);
-                                detail.transform.localScale = new Vector3(scale, height, scale);
-                            }
-
-                        }
-                    }
-                }
-            }
-
-            return meshTerrain;
         }
 
 #if UNITY_EDITOR
