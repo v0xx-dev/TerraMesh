@@ -6,7 +6,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         [NoScaleOffset]_Splatmap_1("Splatmap 1", 2D) = "black" {}
         [NoScaleOffset]_Albedo_0("Albedo 0", 2D) = "black" {}
         [HDR]_Color_Tint_0("Color Tint 0", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_0("Normals 0", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_0("Normals 0", 2D) = "bump" {}
         _Normal_Scale_0("Normal Scale 0", Float) = 1
         [NoScaleOffset]_Mask_0("Mask 0", 2D) = "black" {}
         _Metallic_Remapping_0("Metallic Remapping 0", Vector) = (0, 1, 0, 0)
@@ -16,7 +16,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_0("Offset 0", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_1("Albedo (1)", 2D) = "black" {}
         [HDR]_Color_Tint_1("Color Tint (1)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_1("Normals (1)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_1("Normals (1)", 2D) = "bump" {}
         _Normal_Scale_1("Normal Scale (1)", Float) = 1
         [NoScaleOffset]_Mask_1("Mask (1)", 2D) = "black" {}
         _Metallic_Remapping_1("Metallic Remapping (1)", Vector) = (0, 1, 0, 0)
@@ -26,7 +26,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_1("Offset (1)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_2("Albedo (2)", 2D) = "black" {}
         [HDR]_Color_Tint_2("Color Tint (2)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_2("Normals (2)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_2("Normals (2)", 2D) = "bump" {}
         _Normal_Scale_2("Normal Scale (2)", Float) = 1
         [NoScaleOffset]_Mask_2("Mask (2)", 2D) = "black" {}
         _Metallic_Remapping_2("Metallic Remapping (2)", Vector) = (0, 1, 0, 0)
@@ -36,7 +36,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_2("Offset (2)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_3("Albedo (3)", 2D) = "black" {}
         [HDR]_Color_Tint_3("Color Tint (3)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_3("Normals (3)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_3("Normals (3)", 2D) = "bump" {}
         _Normal_Scale_3("Normal Scale (3)", Float) = 1
         [NoScaleOffset]_Mask_3("Mask (3)", 2D) = "black" {}
         _Metallic_Remapping_3("Metallic Remapping (3)", Vector) = (0, 1, 0, 0)
@@ -46,7 +46,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_3("Offset (3)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_4("Albedo (4)", 2D) = "black" {}
         [HDR]_Color_Tint_4("Color Tint (4)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_4("Normals (4)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_4("Normals (4)", 2D) = "bump" {}
         _Normal_Scale_4("Normal Scale (4)", Float) = 1
         [NoScaleOffset]_Mask_4("Mask (4)", 2D) = "black" {}
         _Metallic_Remapping_4("Metallic Remapping (4)", Vector) = (0, 1, 0, 0)
@@ -56,7 +56,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_4("Offset (4)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_5("Albedo (5)", 2D) = "black" {}
         [HDR]_Color_Tint_5("Color Tint (5)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_5("Normals (5)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_5("Normals (5)", 2D) = "bump" {}
         _Normal_Scale_5("Normal Scale (5)", Float) = 1
         [NoScaleOffset]_Mask_5("Mask (5)", 2D) = "black" {}
         _Metallic_Remapping_5("Metallic Remapping (5)", Vector) = (0, 1, 0, 0)
@@ -66,7 +66,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_5("Offset (5)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_6("Albedo (6)", 2D) = "black" {}
         [HDR]_Color_Tint_6("Color Tint (6)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_6("Normals (6)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_6("Normals (6)", 2D) = "bump" {}
         _Normal_Scale_6("Normal Scale (6)", Float) = 1
         [NoScaleOffset]_Mask_6("Mask (6)", 2D) = "black" {}
         _Metallic_Remapping_6("Metallic Remapping (6)", Vector) = (0, 1, 0, 0)
@@ -76,7 +76,7 @@ Shader "Shader Graphs/MeshTerrainLit"
         _Offset_6("Offset (6)", Vector) = (0, 0, 0, 0)
         [NoScaleOffset]_Albedo_7("Albedo (7)", 2D) = "black" {}
         [HDR]_Color_Tint_7("Color Tint (7)", Color) = (1, 1, 1, 0)
-        [NoScaleOffset]_Normals_7("Normals (7)", 2D) = "black" {}
+        [Normal][NoScaleOffset]_Normals_7("Normals (7)", 2D) = "bump" {}
         _Normal_Scale_7("Normal Scale (7)", Float) = 1
         [NoScaleOffset]_Mask_7("Mask (7)", 2D) = "black" {}
         _Metallic_Remapping_7("Metallic Remapping (7)", Vector) = (0, 1, 0, 0)
