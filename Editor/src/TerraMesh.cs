@@ -201,9 +201,10 @@ namespace TerraMesh
             
             Bounds levelBounds = config.levelBounds.HasValue ? config.levelBounds.Value : meshRenderer?.bounds ?? default;
 
-            if (meshFilter == null || meshCollider == null)
+            if (meshFilter == null || meshCollider == null || meshRenderer == null)
             {
-                Debug.LogError("MeshFilter and MeshCollider components must be present on the object to modify.");
+                Debug.LogError("MeshFilter, MeshCollider and MeshRenderer components must be present on the object to modify.");
+                return;
             }
 
             if (levelBounds == default)
@@ -212,9 +213,10 @@ namespace TerraMesh
                 return;
             }
 
-            Mesh originalMesh = meshFilter!.sharedMesh;
-            (Mesh newMesh, int submeshIndex) = meshTerrainObject.ExtractLargestSubmesh();
-            newMesh.name = originalMesh.name + "_Postprocessed";
+            Mesh originalMesh = meshFilter.sharedMesh;
+            int submeshIndex = meshRenderer.subMeshStartIndex;
+            Mesh newMesh = meshTerrainObject.ExtractSubmesh(submeshIndex);
+            newMesh.name = meshTerrainObject.name + "_Postprocessed";
 
             Debug.LogDebug("Extracted submesh with " + newMesh.vertexCount + " vertices and " + newMesh.triangles.Length / 3 + " triangles" + " from submesh " + submeshIndex + " of " + meshTerrainObject.name);
 
@@ -659,19 +661,32 @@ namespace TerraMesh
         public static (Mesh submesh, int submeshIndex) ExtractLargestSubmesh(this GameObject meshObject)
         {
             Mesh mesh = meshObject.GetComponent<MeshFilter>().sharedMesh;
+            var submeshCount = mesh.subMeshCount;
+            var largestSubmeshIndex = Enumerable.Range(0, submeshCount)
+                .OrderByDescending(i => mesh.GetSubMesh(i).vertexCount)
+                .First();
+            
+            return (meshObject.ExtractSubmesh(largestSubmeshIndex), largestSubmeshIndex);
+        }
+
+        public static Mesh ExtractSubmesh(this GameObject meshObject)
+        {
+            MeshRenderer? meshRenderer = meshObject.GetComponent<MeshRenderer>();
+            int submeshIndex = meshRenderer?.subMeshStartIndex ?? 0;
+            return meshObject.ExtractSubmesh(submeshIndex);
+        }
+
+        public static Mesh ExtractSubmesh(this GameObject meshObject, int submeshIndex = 0)
+        {
+            Mesh mesh = meshObject.GetComponent<MeshFilter>().sharedMesh;
             Transform transform = meshObject.transform;
 
             Mesh meshCopy = mesh.MakeReadableCopy();
 
             var submeshCount = meshCopy.subMeshCount;
-            if (submeshCount <= 1) return (meshCopy, 0);
+            if (submeshCount <= 1) return meshCopy;
 
-
-            var largestSubmeshIndex = Enumerable.Range(0, submeshCount)
-                .OrderByDescending(i => meshCopy.GetSubMesh(i).vertexCount)
-                .First();
-
-            var triangles = meshCopy.GetTriangles(largestSubmeshIndex);
+            var triangles = meshCopy.GetTriangles(submeshIndex);
             var usedVertices = new HashSet<int>(triangles);
             var oldToNewVertexMap = new Dictionary<int, int>();
 
@@ -698,7 +713,7 @@ namespace TerraMesh
 
             var submesh = new Mesh
             {
-                name = meshCopy.name + "_Submesh" + largestSubmeshIndex,
+                name = meshCopy.name + "_Submesh" + submeshIndex,
                 vertices = newVertices.ToArray(),
                 triangles = newTriangles,
                 indexFormat = meshCopy.indexFormat
@@ -715,7 +730,7 @@ namespace TerraMesh
             GameObject.Destroy(meshCopy);
 #endif
 
-            return (submesh, largestSubmeshIndex);
+            return submesh;
         }
 
         //Credit to Matty for this method
