@@ -835,7 +835,7 @@ namespace TerraMesh
             MeshRenderer meshRenderer = meshTerrain.AddComponent<MeshRenderer>();
             // Set same position, parent, rendering layer, rendering layer mask and tag as the terrain (and set the snow overlay custom pass layer)
             meshTerrain.transform.position = terrain.transform.position;
-            meshTerrain.transform.SetParent(terrain.transform.parent);
+            meshTerrain.transform.SetParent(terrain.transform.parent ?? terrain.transform);
             meshRenderer.gameObject.layer = terrain.gameObject.layer;
             meshRenderer.gameObject.tag = terrain.gameObject.tag;
             terrain.renderingLayerMask |= config.renderingLayerMask;
@@ -852,15 +852,22 @@ namespace TerraMesh
 
             meshFilter.mesh = mesh;
             meshRenderer.sharedMaterial = new Material(config.terraMeshShader);
+#if UNITY_EDITOR
+            // Hide terrain object in editor
+            terrain.gameObject.SetActive(false);
+#else
             // Disable rendering of terrain
             terrain.drawHeightmap = false;
             // terrain.drawInstanced = false; // TODO: Check if this is necessary
-
+#endif
             //Ideally trees should be copied if we want to use a mesh collider
             if (config.copyTrees)
             {
+
+#if !UNITY_EDITOR
                 //Disable rendering of trees on terrain
                 terrain.treeDistance = 0;
+#endif
                 // Create Trees parent object
                 Transform treesParent = new GameObject("Trees").transform;
                 treesParent.position = meshTerrain.transform.position;
@@ -904,7 +911,6 @@ namespace TerraMesh
                 var scaleX = terrainData.size.x / terrainData.detailWidth;
                 var scaleZ = terrainData.size.z / terrainData.detailHeight;
                 Debug.LogDebug("Detail Prototypes: " + terrainData.detailPrototypes.Length);
-
 
                 for (int d = 0; d < terrainData.detailPrototypes.Length; d++)
                 {
@@ -950,7 +956,7 @@ namespace TerraMesh
                 float heightmapZ = (pos.z - terrainData.terrainPosition.z) / terrainData.terrainStepZ;
                 int x = Mathf.Clamp(Mathf.RoundToInt(heightmapX), 0, terrainData.heightmapResolution - 1);
                 int z = Mathf.Clamp(Mathf.RoundToInt(heightmapZ), 0, terrainData.heightmapResolution - 1);
-                return terrainData.heightmapData[z, x] * terrainData.terrainHeight; // TODO check if order z,x is correct here
+                return terrainData.heightmapData[z, x] * terrainData.terrainHeight; 
             }
 
             int actualCellStep;
@@ -1007,8 +1013,8 @@ namespace TerraMesh
 
                             if (config.carveHoles)
                             {
-                                int heightmapX = (int)((vertex.x) / terrainData.terrainStepX);
-                                int heightmapZ = (int)((vertex.z) / terrainData.terrainStepZ);
+                                int heightmapX = (int)(vertex.x / terrainData.terrainStepX);
+                                int heightmapZ = (int)(vertex.z / terrainData.terrainStepZ);
                                 heightmapX = Mathf.Clamp(heightmapX, 0, terrainData.holesResolution - 1);
                                 heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
 

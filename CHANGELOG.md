@@ -1,3 +1,9 @@
+## 1.1.3
+
+- Fix for a possible NRE if the original terrain was in the root of the scene
+- No longer messes with terrain settings if in the editor (only disables it)
+- More correct submesh extraction algorithm
+
 ## 1.1.2
 
 - Fixed shader problems when no normal map is assigned
