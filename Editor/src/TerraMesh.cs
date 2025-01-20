@@ -9,6 +9,8 @@ using TriangleNet.Meshing;
 using TriangleNet.Unity;
 using TriangleNet.Smoothing;
 using TerraMesh.Utils;
+using System.Threading.Tasks;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -195,8 +197,91 @@ namespace TerraMesh
         {
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
-            MeshFilter? meshFilter = meshTerrainObject!.GetComponent<MeshFilter>();
-            MeshCollider? meshCollider = meshTerrainObject.GetComponent<MeshCollider>();
+            bool isMeshAnalyzed = meshTerrainObject.TryAnalyzeMesh(config, out Mesh? newMesh, out Vector3[] vertices, out int[] triangles,
+                                            out Vector2[] uvs, out Vector2[] uvs2, out float maxEdgeLength, out int heightAxis,
+                                            out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
+
+
+            if (!isMeshAnalyzed || newMesh == null)
+            {
+                Debug.LogError("Mesh terrain could not be postprocessed.");
+                return;
+            }
+
+            MeshifyData meshifyData = BeautifyMeshData(config, vertices, triangles, uvs, uvs2, maxEdgeLength, heightAxis, objectSpaceBounds, sw);
+
+            newMesh.vertices = meshifyData.vertices?.ToArray();
+            newMesh.triangles = meshifyData.triangles?.ToArray();
+            newMesh.uv = meshifyData.uvs?.ToArray();
+            newMesh.uv2 = meshifyData.uvs2?.ToArray();
+
+            newMesh.Optimize();
+            newMesh.RecalculateNormals();
+            newMesh.RecalculateTangents();
+            newMesh.RecalculateBounds();
+
+            meshFilter!.sharedMesh = newMesh;
+            meshCollider!.sharedMesh = newMesh;
+        }
+
+        public static async Task PostprocessMeshTerrainAsync(this GameObject meshTerrainObject, TerraMeshConfig config)
+        {
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+
+            bool isMeshAnalyzed = meshTerrainObject.TryAnalyzeMesh(config, out Mesh? newMesh, out Vector3[] vertices, out int[] triangles,
+                                            out Vector2[] uvs, out Vector2[] uvs2, out float maxEdgeLength, out int heightAxis,
+                                            out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
+
+            if (!isMeshAnalyzed || newMesh == null)
+            {
+                Debug.LogError("Mesh terrain could not be postprocessed.");
+                return;
+            }
+
+            MeshifyData meshifyData = await Task.Run(() => BeautifyMeshData(config, vertices, triangles,
+                                                        uvs, uvs2, maxEdgeLength, heightAxis,
+                                                        objectSpaceBounds, sw));
+
+            newMesh.vertices = meshifyData.vertices?.ToArray();
+            newMesh.triangles = meshifyData.triangles?.ToArray();
+            newMesh.uv = meshifyData.uvs?.ToArray();
+            newMesh.uv2 = meshifyData.uvs2?.ToArray();
+
+            newMesh.Optimize();
+            newMesh.RecalculateNormals();
+            newMesh.RecalculateTangents();
+            newMesh.RecalculateBounds();
+
+            meshFilter!.sharedMesh = newMesh;
+            meshCollider!.sharedMesh = newMesh;
+        }
+
+        private static bool TryAnalyzeMesh(this GameObject meshTerrainObject,
+                                        TerraMeshConfig config,
+                                        out Mesh? newMesh,
+                                        out Vector3[] vertices,
+                                        out int[] triangles,
+                                        out Vector2[] uvs,
+                                        out Vector2[] uvs2,
+                                        out float maxEdgeLength,
+                                        out int heightAxis,
+                                        out Bounds objectSpaceBounds,
+                                        out MeshFilter? meshFilter,
+                                        out MeshCollider? meshCollider
+                                        )
+
+        {
+            newMesh = null;
+            vertices = new Vector3[0];
+            triangles = new int[0];
+            uvs = new Vector2[0];
+            uvs2 = new Vector2[0];
+            maxEdgeLength = 0;
+            heightAxis = 0;
+            objectSpaceBounds = new Bounds();
+
+            meshFilter = meshTerrainObject!.GetComponent<MeshFilter>();
+            meshCollider = meshTerrainObject.GetComponent<MeshCollider>();
             MeshRenderer? meshRenderer = meshTerrainObject.GetComponent<MeshRenderer>();
             
             Bounds levelBounds = config.levelBounds.HasValue ? config.levelBounds.Value : meshRenderer?.bounds ?? default;
@@ -204,24 +289,24 @@ namespace TerraMesh
             if (meshFilter == null || meshCollider == null || meshRenderer == null)
             {
                 Debug.LogError("MeshFilter, MeshCollider and MeshRenderer components must be present on the object to modify.");
-                return;
+                return false;
             }
 
             if (levelBounds == default)
             {
                 Debug.LogError("Level bounds must be set to postprocess the mesh terrain. Either set the level bounds in the TerraMeshConfig or ensure the MeshRenderer component is present on the object.");
-                return;
+                return false;
             }
 
             Mesh originalMesh = meshFilter.sharedMesh;
             int submeshIndex = meshRenderer.subMeshStartIndex;
-            Mesh newMesh = meshTerrainObject.ExtractSubmesh(submeshIndex);
+            newMesh = meshTerrainObject.ExtractSubmesh(submeshIndex);
             newMesh.name = meshTerrainObject.name + "_Postprocessed";
 
             Debug.LogDebug("Extracted submesh with " + newMesh.vertexCount + " vertices and " + newMesh.triangles.Length / 3 + " triangles" + " from submesh " + submeshIndex + " of " + meshTerrainObject.name);
 
             // Determine height axis
-            int heightAxis = 0;
+            heightAxis = 0;
 
             Vector3 objectSpaceUpDirection = meshTerrainObject.transform.InverseTransformDirection(Vector3.up);
             objectSpaceUpDirection.x *= Mathf.Sign(meshTerrainObject.transform.lossyScale.x);
@@ -245,17 +330,16 @@ namespace TerraMesh
 
             if (config.onlyUVs)
             {
-                newMesh.uv2 = UnwrapUVs(newMesh.vertices, heightAxis, true);
+                newMesh.uv2 = UnwrapUVs(newMesh.vertices.ToList(), heightAxis, true).ToArray();
                 meshFilter = meshTerrainObject.GetComponent<MeshFilter>();
                 meshFilter.sharedMesh = newMesh;
 
                 meshCollider = meshTerrainObject.GetComponent<MeshCollider>();
                 meshCollider.sharedMesh = newMesh;
 
-                return;
+                return true;
             }
 
-            Bounds objectSpaceBounds;
             if (config.useBounds)
             {
                 // Transform bounds to object space
@@ -269,7 +353,7 @@ namespace TerraMesh
                 if (!newMesh.bounds.Intersects(objectSpaceBounds))
                 {
                     Debug.LogDebug("Object's bounds do not intersect with level bounds. No vertices will be processed.");
-                    return;
+                    return false;
                 }
             }
             else
@@ -280,38 +364,24 @@ namespace TerraMesh
             Debug.LogDebug("Bounds for triangulation: " + objectSpaceBounds.center + " " + objectSpaceBounds.size);
 
             // Get the original mesh data
-            Vector3[] vertices = newMesh.vertices;
-            Vector2[] uvs = newMesh.uv;
-            Vector2[] uvs2 = new Vector2[0];
-            int[] triangles = newMesh.triangles;
+            vertices = newMesh.vertices;
+            uvs = newMesh.uv;
+            triangles = newMesh.triangles;
 
             //Calculate max scale only taking the absolute horizontal scales into account, horizontal is everything not on the height axis
             float maxScale = Mathf.Max(Mathf.Abs(meshTerrainObject.transform.lossyScale[(heightAxis + 1) % 3]), Mathf.Abs(meshTerrainObject.transform.lossyScale[(heightAxis + 2) % 3]));
-            float maxEdgeLength = config.baseEdgeLength / maxScale;
+            maxEdgeLength = config.baseEdgeLength / maxScale;
             Debug.LogDebug("Max scale: " + maxScale + " Max edge length: " + maxEdgeLength + "m");
 
-            BeautifyMeshData(config, ref vertices, ref triangles, ref uvs, ref uvs2, maxEdgeLength, heightAxis, objectSpaceBounds, sw);
-
-            newMesh.vertices = vertices;
-            newMesh.triangles = triangles;
-            newMesh.uv = uvs;
-            newMesh.uv2 = uvs2;
-
-            newMesh.Optimize();
-            newMesh.RecalculateNormals();
-            newMesh.RecalculateTangents();
-            newMesh.RecalculateBounds();
-
-            meshFilter.sharedMesh = newMesh;
-            meshCollider!.sharedMesh = newMesh;
+            return true;
         }
 
-        private static void BeautifyMeshData(
+        private static MeshifyData BeautifyMeshData(
                                             TerraMeshConfig config,
-                                            ref Vector3[] vertices,
-                                            ref int[] triangles,
-                                            ref Vector2[] uvs,
-                                            ref Vector2[] uvs2,
+                                            Vector3[] vertices,
+                                            int[] triangles,
+                                            Vector2[] uvs,
+                                            Vector2[] uvs2,
                                             float maxEdgeLength,
                                             int heightAxis,
                                             Bounds objectSpaceBounds,
@@ -574,42 +644,40 @@ namespace TerraMesh
             Debug.LogDebug("Original UVs: " + uvs.Length + " New UVs: " + newUVs.Count);
             Debug.LogDebug("Original vertices: " + vertices.Length + " New vertices: " + newVertices.Count);
 
-            vertices = newVertices.ToArray();
-            triangles = newTriangles.ToArray();
-            uvs2 = UnwrapUVs(vertices, heightAxis, true);
+            List<Vector2> newUVs2 = UnwrapUVs(newVertices, heightAxis, true);
             
             if (config.replaceUvs)
             {
-                uvs = uvs2.ToArray(); // Replace UVs with unwrapped UVs (only acceptable on moons with no splatmaps)
+                newUVs = newUVs2.ToList(); // Replace UVs with unwrapped UVs (only acceptable on moons with no splatmaps)
             }
-            else
-            {
-                uvs = newUVs.ToArray();
-            }
+
+            return new MeshifyData(newVertices, newTriangles, newUVs, newUVs2);
         }
 
-        private static Vector2[] UnwrapUVs(Vector3[] vertices, int upAxis, bool normalize)
+        private static List<Vector2> UnwrapUVs(List<Vector3> vertices, int upAxis, bool normalize)
         {
-            Vector2[] uvs = new Vector2[vertices.Length];
+            List<Vector2> uvs = new List<Vector2>();
             Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
             Vector2 max = new Vector2(float.MinValue, float.MinValue);
 
-            for (int i = 0; i < vertices.Length; i++)
+            for (int i = 0; i < vertices.Count; i++)
             {
+                Vector2 uv;
                 if (upAxis == 0)
-                    uvs[i] = new Vector2(vertices[i].y, vertices[i].z);
+                    uv = new Vector2(vertices[i].y, vertices[i].z);
                 else if (upAxis == 1)
-                    uvs[i] = new Vector2(vertices[i].x, vertices[i].z);
+                    uv = new Vector2(vertices[i].x, vertices[i].z);
                 else
-                    uvs[i] = new Vector2(vertices[i].x, vertices[i].y);
+                    uv = new Vector2(vertices[i].x, vertices[i].y);
 
-                min = Vector2.Min(min, uvs[i]);
-                max = Vector2.Max(max, uvs[i]);
+                uvs.Add(uv);
+                min = Vector2.Min(min, uv);
+                max = Vector2.Max(max, uv);
             }
             if (normalize)
             {
                 Vector2 size = max - min;
-                for (int i = 0; i < uvs.Length; i++)
+                for (int i = 0; i < uvs.Count; i++)
                 {
                     uvs[i] = new Vector2((uvs[i].x - min.x) / size.x, (uvs[i].y - min.y) / size.y);
                 }
@@ -811,11 +879,27 @@ namespace TerraMesh
             return meshTerrain;
         }
 
+        public static async Task<GameObject> MeshifyAsync(this Terrain terrain, TerraMeshConfig config)
+        {
+            if (terrain == null)
+            {
+                throw new ArgumentNullException("terrain", "Terrain object cannot be null.");
+            }
+
+            MeshifyTerrainData meshTerrainData = new MeshifyTerrainData(terrain);
+
+            await Task.Run(() => GenerateMeshData(config, meshTerrainData));
+
+            GameObject meshTerrain = terrain.Meshify(config, meshTerrainData);
+
+            return meshTerrain;
+        }
+
         private static GameObject Meshify(this Terrain terrain, TerraMeshConfig config, MeshifyTerrainData meshTerrainData)
         {
-            Vector3[] vertices = meshTerrainData.vertices.ToArray();
-            int[] triangles = meshTerrainData.triangles.ToArray(); 
-            Vector2[] uvs = meshTerrainData.uvs.ToArray();
+            Vector3[] vertices = meshTerrainData.vertices!.ToArray();
+            int[] triangles = meshTerrainData.triangles!.ToArray(); 
+            Vector2[] uvs = meshTerrainData.uvs!.ToArray();
 
             // Create mesh from sampled vertices and triangles
             Mesh mesh = new Mesh();
@@ -957,6 +1041,11 @@ namespace TerraMesh
                 int x = Mathf.Clamp(Mathf.RoundToInt(heightmapX), 0, terrainData.heightmapResolution - 1);
                 int z = Mathf.Clamp(Mathf.RoundToInt(heightmapZ), 0, terrainData.heightmapResolution - 1);
                 return terrainData.heightmapData[z, x] * terrainData.terrainHeight; 
+            }
+
+            if (terrainData.vertices == null || terrainData.uvs == null || terrainData.triangles == null)
+            {
+                throw new ArgumentNullException("terrainData", "Terrain data is null. Cannot generate mesh.");
             }
 
             int actualCellStep;

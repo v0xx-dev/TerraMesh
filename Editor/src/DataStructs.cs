@@ -226,7 +226,28 @@ namespace TerraMesh.Utils
     }
 
     [Serializable]
-    public class MeshifyTerrainData
+    public class MeshifyData
+    {
+        public List<Vector3>? vertices;
+        public List<int>? triangles;
+        public List<Vector2>? uvs;
+        public List<Vector2>? uvs2;
+
+        public MeshifyData(List<Vector3>? vertices = null,
+                            List<int>? triangles = null,
+                            List<Vector2>? uvs = null,
+                            List<Vector2>? uvs2 = null)
+        {
+            this.vertices = vertices;
+            this.triangles = triangles;
+            this.uvs = uvs;
+            this.uvs2 = uvs2;
+        }
+    }
+
+
+    [Serializable]
+    public class MeshifyTerrainData: MeshifyData
     {
         public float[,] heightmapData;
         public bool[,] holesData;
@@ -241,10 +262,6 @@ namespace TerraMesh.Utils
         public float uvStepZ;
         public Vector3 terrainPosition;
         public Bounds terrainBounds;
-
-        public List<Vector3> vertices;
-        public List<int> triangles;
-        public List<Vector2> uvs;
 
         public MeshifyTerrainData(Terrain terrain)
         {
