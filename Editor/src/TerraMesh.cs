@@ -202,7 +202,13 @@ namespace TerraMesh
                                             out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
 
 
-            if (!isMeshAnalyzed || newMesh == null)
+            if (newMesh != null && config.onlyUVs)
+            {
+                Debug.LogDebug("Mesh processed for UVs only.");
+                return;
+            }
+            
+            if (!isMeshAnalyzed)
             {
                 Debug.LogError("Mesh terrain could not be postprocessed.");
                 return;
@@ -224,25 +230,31 @@ namespace TerraMesh
             meshCollider!.sharedMesh = newMesh;
         }
 
-        public static async Task PostprocessMeshTerrainAsync(this GameObject meshTerrainObject, TerraMeshConfig config)
+        public static async Task<GameObject?> PostprocessMeshTerrainAsync(this GameObject meshTerrainObject, TerraMeshConfig config)
         {
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
             bool isMeshAnalyzed = meshTerrainObject.TryAnalyzeMesh(config, out Mesh? newMesh, out Vector3[] vertices, out int[] triangles,
                                             out Vector2[] uvs, out Vector2[] uvs2, out float maxEdgeLength, out int heightAxis,
                                             out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
-
-            if (!isMeshAnalyzed || newMesh == null)
+            
+            if (newMesh != null && config.onlyUVs)
+            {
+                Debug.LogDebug("Mesh processed for UVs only.");
+                return meshTerrainObject;
+            }
+            
+            if (!isMeshAnalyzed)
             {
                 Debug.LogError("Mesh terrain could not be postprocessed.");
-                return;
+                return null;
             }
 
             MeshifyData meshifyData = await Task.Run(() => BeautifyMeshData(config, vertices, triangles,
                                                         uvs, uvs2, maxEdgeLength, heightAxis,
                                                         objectSpaceBounds, sw));
 
-            newMesh.vertices = meshifyData.vertices?.ToArray();
+            newMesh!.vertices = meshifyData.vertices?.ToArray();
             newMesh.triangles = meshifyData.triangles?.ToArray();
             newMesh.uv = meshifyData.uvs?.ToArray();
             newMesh.uv2 = meshifyData.uvs2?.ToArray();
@@ -254,6 +266,8 @@ namespace TerraMesh
 
             meshFilter!.sharedMesh = newMesh;
             meshCollider!.sharedMesh = newMesh;
+
+            return meshTerrainObject;
         }
 
         private static bool TryAnalyzeMesh(this GameObject meshTerrainObject,
@@ -337,7 +351,7 @@ namespace TerraMesh
                 meshCollider = meshTerrainObject.GetComponent<MeshCollider>();
                 meshCollider.sharedMesh = newMesh;
 
-                return true;
+                return false;
             }
 
             if (config.useBounds)
@@ -879,11 +893,12 @@ namespace TerraMesh
             return meshTerrain;
         }
 
-        public static async Task<GameObject> MeshifyAsync(this Terrain terrain, TerraMeshConfig config)
+        public static async Task<GameObject?> MeshifyAsync(this Terrain terrain, TerraMeshConfig config)
         {
             if (terrain == null)
             {
-                throw new ArgumentNullException("terrain", "Terrain object cannot be null.");
+                Debug.LogError("Terrain is not set!");
+                return null;
             }
 
             MeshifyTerrainData meshTerrainData = new MeshifyTerrainData(terrain);

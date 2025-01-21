@@ -60,5 +60,6 @@ namespace TerraMesh
         public static void LogMessage(string message) => Logger.LogMessage(message);
         public static void LogFatal(string message) => Logger.LogFatal(message);
 #endif
+        public static void NoLog(string message) { }
     }
 }
