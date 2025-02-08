@@ -1,3 +1,8 @@
+## 1.1.4
+
+- Option in the shader to use object space coordinates
+- Better logging
+
 ## 1.1.3
 
 - Fix for a possible NRE if the original terrain was in the root of the scene

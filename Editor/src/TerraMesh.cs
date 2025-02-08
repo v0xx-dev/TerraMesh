@@ -196,11 +196,14 @@ namespace TerraMesh
         public static void PostprocessMeshTerrain(this GameObject meshTerrainObject, TerraMeshConfig config)
         {
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            sw.Start();
 
             bool isMeshAnalyzed = meshTerrainObject.TryAnalyzeMesh(config, out Mesh? newMesh, out Vector3[] vertices, out int[] triangles,
                                             out Vector2[] uvs, out Vector2[] uvs2, out float maxEdgeLength, out int heightAxis,
                                             out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
 
+            sw.Stop();
+            Debug.LogDebug("Mesh analysis time: " + sw.ElapsedMilliseconds + "ms");
 
             if (newMesh != null && config.onlyUVs)
             {
@@ -216,6 +219,8 @@ namespace TerraMesh
 
             MeshifyData meshifyData = BeautifyMeshData(config, vertices, triangles, uvs, uvs2, maxEdgeLength, heightAxis, objectSpaceBounds, sw);
 
+            sw.Restart();
+
             newMesh.vertices = meshifyData.vertices?.ToArray();
             newMesh.triangles = meshifyData.triangles?.ToArray();
             newMesh.uv = meshifyData.uvs?.ToArray();
@@ -228,16 +233,24 @@ namespace TerraMesh
 
             meshFilter!.sharedMesh = newMesh;
             meshCollider!.sharedMesh = newMesh;
+
+            sw.Stop();
+            Debug.LogDebug("Mesh refresh time: " + sw.ElapsedMilliseconds + "ms");
         }
 
         public static async Task<GameObject?> PostprocessMeshTerrainAsync(this GameObject meshTerrainObject, TerraMeshConfig config)
         {
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
+            sw.Start();
+
             bool isMeshAnalyzed = meshTerrainObject.TryAnalyzeMesh(config, out Mesh? newMesh, out Vector3[] vertices, out int[] triangles,
                                             out Vector2[] uvs, out Vector2[] uvs2, out float maxEdgeLength, out int heightAxis,
                                             out Bounds objectSpaceBounds, out MeshFilter? meshFilter, out MeshCollider? meshCollider);
             
+            sw.Stop();
+            Debug.LogDebug("Mesh analysis time: " + sw.ElapsedMilliseconds + "ms");
+
             if (newMesh != null && config.onlyUVs)
             {
                 Debug.LogDebug("Mesh processed for UVs only.");
@@ -254,6 +267,7 @@ namespace TerraMesh
                                                         uvs, uvs2, maxEdgeLength, heightAxis,
                                                         objectSpaceBounds, sw));
 
+            sw.Restart();
             newMesh!.vertices = meshifyData.vertices?.ToArray();
             newMesh.triangles = meshifyData.triangles?.ToArray();
             newMesh.uv = meshifyData.uvs?.ToArray();
@@ -266,6 +280,9 @@ namespace TerraMesh
 
             meshFilter!.sharedMesh = newMesh;
             meshCollider!.sharedMesh = newMesh;
+
+            sw.Stop();
+            Debug.LogDebug("Mesh refresh time: " + sw.ElapsedMilliseconds + "ms");
 
             return meshTerrainObject;
         }
@@ -1064,6 +1081,8 @@ namespace TerraMesh
             }
 
             int actualCellStep;
+            
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
             HashSet<Vector3> holeVertices = new HashSet<Vector3>();
 
@@ -1093,6 +1112,8 @@ namespace TerraMesh
                 HashSet<Vector3> uniqueVertices = new HashSet<Vector3>();
                 List<QuadTree> leafNodes = new List<QuadTree>();
                 rootNode.GetLeafNodes(leafNodes);
+
+                sw.Start();
 
                 foreach (var node in leafNodes)
                 {
@@ -1132,7 +1153,8 @@ namespace TerraMesh
                     }
                 }
 
-                Debug.LogDebug("Sampled vertices: " + terrainData.vertices.Count);
+                sw.Stop();
+                Debug.LogDebug($"Sampled vertices: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
 
                 var polygon = new Polygon();
 
@@ -1147,7 +1169,6 @@ namespace TerraMesh
                 ConstraintOptions options = new ConstraintOptions() { ConformingDelaunay = false, SegmentSplitting = 2 };
                 QualityOptions quality = new QualityOptions() { MinimumAngle = 20.0f, SteinerPoints = config.refineMesh ? maxAdditionalVertices : 0 };
 
-                System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
                 // Perform triangulation
                 sw.Restart();
                 var mesh2d = polygon.Triangulate(options, quality);
@@ -1202,6 +1223,7 @@ namespace TerraMesh
             }
             else // Uniform meshing if no level bounds are set
             {
+                sw.Start();
                 int minMeshStep = config.minMeshStep;
                 // Calculate density factor to achieve target vertex count
                 if (config.targetVertexCount > 0)
@@ -1282,6 +1304,8 @@ namespace TerraMesh
                         terrainData.triangles.Add(vertexIndex + 1);                 // Vertex to the right
                     }
                 }
+                sw.Stop();
+                Debug.LogDebug("Generated triangles: " + terrainData.triangles.Count + " Time: " + sw.ElapsedMilliseconds + "ms");
             }
         }
 
