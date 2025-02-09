@@ -1,3 +1,7 @@
+## 1.1.6
+
+- Fixed incorrect hole carving for non-adaptive algorithm
+
 ## 1.1.5
 
 - Fixed incorrect hole carving

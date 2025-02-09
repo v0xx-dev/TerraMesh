@@ -1264,7 +1264,7 @@ namespace TerraMesh
                             heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
 
                             // Check if the vertex is inside a terrain hole
-                            if (!terrainData.holesData[heightmapX, heightmapZ])
+                            if (!terrainData.holesData[heightmapZ, heightmapX])
                             {
                                 holeVertices.Add(vertex);
                             }
