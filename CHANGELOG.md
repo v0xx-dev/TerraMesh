@@ -1,3 +1,7 @@
+## 1.1.5
+
+- Fixed incorrect hole carving
+
 ## 1.1.4
 
 - Option in the shader to use object space coordinates
