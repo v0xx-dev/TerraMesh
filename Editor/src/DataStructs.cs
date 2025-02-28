@@ -82,13 +82,14 @@ namespace TerraMesh.Utils
             // Size of the side where the quad is
             Vector3 distanceToCenter =  bounds.center - levelBounds.center;
             float distance = Mathf.Max(Mathf.Abs(distanceToCenter.x), Mathf.Abs(distanceToCenter.z));
-
+            
             float actualCellStep = minCellStep;
             if (distance > sideSize)
             {
                 actualCellStep = Mathf.Lerp(minCellStep, maxCellStep, falloffSpeed*(distance - sideSize) / maxDistance);
             }
-            actualCellStep = Mathf.Max(actualCellStep, 1);
+
+            actualCellStep = Mathf.Clamp(actualCellStep, 1, maxCellStep);
 
             // If the quad is too large for desired step size, subdivide
             if (bounds.size.x > actualCellStep * stepSize.x || bounds.size.z > actualCellStep * stepSize.y)
@@ -223,6 +224,31 @@ namespace TerraMesh.Utils
                 Debug.LogError("TerraMesh shader not found. This will cause the mesh terrain to have broken visuals.");
             }
         }
+
+        public override readonly string ToString()
+        {
+            return $"TerraMeshConfig:\n" +
+                $"  levelBounds: {levelBounds}\n" +
+                $"  useBounds: {useBounds}\n" +
+                $"  constrainEdges: {constrainEdges}\n" +
+                $"  subdivideMesh: {subdivideMesh}\n" +
+                $"  baseEdgeLength: {baseEdgeLength}\n" +
+                $"  smoothMesh: {smoothMesh}\n" +
+                $"  smoothingIterations: {smoothingIterations}\n" +
+                $"  replaceUvs: {replaceUvs}\n" +
+                $"  onlyUVs: {onlyUVs}\n" +
+                $"  renderingLayerMask: {renderingLayerMask}\n" +
+                $"  minMeshStep: {minMeshStep}\n" +
+                $"  maxMeshStep: {maxMeshStep}\n" +
+                $"  falloffSpeed: {falloffSpeed}\n" +
+                $"  targetVertexCount: {targetVertexCount}\n" +
+                $"  carveHoles: {carveHoles}\n" +
+                $"  refineMesh: {refineMesh}\n" +
+                $"  useMeshCollider: {useMeshCollider}\n" +
+                $"  copyTrees: {copyTrees}\n" +
+                $"  copyDetail: {copyDetail}\n" +
+                $"  terraMeshShader: {terraMeshShader?.name ?? "null"}"; 
+        }
     }
 
     [Serializable]
@@ -242,6 +268,15 @@ namespace TerraMesh.Utils
             this.triangles = triangles;
             this.uvs = uvs;
             this.uvs2 = uvs2;
+        }
+
+        public override string ToString()
+        {
+            return $"MeshifyData:\n" +
+                $"  Vertex count: {vertices?.Count}\n" +
+                $"  Triangle count: {triangles?.Count / 3}\n" +
+                $"  UVs count: {uvs?.Count}\n" +
+                $"  UV2s count: {uvs2?.Count}"; 
         }
     }
 
@@ -317,6 +352,22 @@ namespace TerraMesh.Utils
 
             terrainPosition = terrain.transform.position;
             terrainBounds = terrain.terrainData.bounds;
+        }
+
+        public override string ToString()
+        {
+            return $"MeshifyTerrainData:\n" +
+            $"  Heightmap resolution: {heightmapResolution}\n" +
+            $"  Holes resolution: {holesResolution}\n" +
+            $"  Terrain step X: {terrainStepX}\n" +
+            $"  Terrain step Z: {terrainStepZ}\n" +
+            $"  Terrain width: {terrainWidth}\n" +
+            $"  Terrain length: {terrainLength}\n" +
+            $"  Terrain height: {terrainHeight}\n" +
+            $"  UV step X: {uvStepX}\n" +
+            $"  UV step Z: {uvStepZ}\n" +
+            $"  Terrain position: {terrainPosition}\n" +
+            $"  Terrain bounds: {terrainBounds}";
         }
     }
 }

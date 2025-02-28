@@ -1086,27 +1086,27 @@ namespace TerraMesh
 
             HashSet<Vector3> holeVertices = new HashSet<Vector3>();
 
-            if (config.levelBounds != null) // Use the level bounds to determine the mesh density
+#if DEBUG
+                Debug.LogDebug($"Generating mesh using: {config}");
+                Debug.LogDebug($"Terrain data: {terrainData}");
+#endif
+
+            if (config.useBounds && config.levelBounds != null) // Use the level bounds to determine the mesh density
             {
                 terrainData.terrainBounds.center += terrainData.terrainPosition;
                 float terrainSize = Mathf.Max(terrainData.terrainBounds.extents.x, terrainData.terrainBounds.extents.z);
-                //Debug.LogDebug"Terrain center: " + terrainBounds.center + " Terrain Size: " + terrainSize);
-
                 Vector3 levelCenter = config.levelBounds.Value.center;
                 float levelSize = Mathf.Max(config.levelBounds.Value.extents.x, config.levelBounds.Value.extents.z);
-                //Debug.LogDebug"Level Center: " + levelCenter + " Level Size: " + levelSize);
-
+                float maxDistance = 2*levelSize;
                 int minMeshStep = config.minMeshStep;
                 if (config.targetVertexCount > 0)
                 {
                     minMeshStep = Mathf.CeilToInt(Mathf.Sqrt(levelSize * levelSize / (terrainData.terrainStepX * terrainData.terrainStepZ * config.targetVertexCount)));
                 }
 
-                //Debug.LogDebug"Base Density Factor: " + minMeshStep);
-
                 QuadTree rootNode = new QuadTree(terrainData.terrainBounds);
                 rootNode.Subdivide(config.levelBounds.Value, new Vector2(terrainData.terrainStepX, terrainData.terrainStepZ), minMeshStep,
-                                    config.maxMeshStep, config.falloffSpeed, terrainSize - levelSize);
+                                    config.maxMeshStep, config.falloffSpeed, maxDistance);
 
                 // Generate vertices from 4 corners of leaf nodes of the quadtree
                 HashSet<Vector3> uniqueVertices = new HashSet<Vector3>();
@@ -1157,6 +1157,9 @@ namespace TerraMesh
                 Debug.LogDebug($"Sampled vertices: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
 
                 var polygon = new Polygon();
+
+                //Insert edge vertices of the terrain as segments to the polygon
+                
 
                 for (int i = 0; i < terrainData.vertices.Count; i++)
                 {

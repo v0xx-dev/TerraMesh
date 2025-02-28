@@ -2,7 +2,7 @@
 	
 	<PropertyGroup>
 		<AssemblyName>voxx.TerraMesh</AssemblyName>
-		<Version>1.1.0</Version>
+		<Version>1.1.7</Version>
 		<Configurations>Debug;Release;Unity Editor</Configurations>
 	</PropertyGroup>
 	
