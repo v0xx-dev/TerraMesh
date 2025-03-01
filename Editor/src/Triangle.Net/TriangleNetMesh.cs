@@ -256,7 +256,7 @@ namespace TriangleNet
 
             this.predicates = config.Predicates();
 
-            this.locator = new TriangleLocator(this, predicates);
+            this.locator = new TriangleLocator(this, predicates, config.RandomSource());
         }
 
         public void Refine(QualityOptions quality, bool delaunay = false)

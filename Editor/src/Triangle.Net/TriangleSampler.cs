@@ -16,24 +16,17 @@ namespace TriangleNet
     /// </summary>
     class TriangleSampler : IEnumerable<Triangle>
     {
-        private const int RANDOM_SEED = 110503;
-
         // Empirically chosen factor.
         private const int samplefactor = 11;
 
-        private Random random;
-        private TriangleNetMesh _TriangleNetMesh;
+        private readonly Random random;
+        private readonly TriangleNetMesh _TriangleNetMesh;
 
         // Number of random samples for point location (at least 1).
         private int samples = 1;
 
         // Number of triangles in mesh.
         private int triangleCount = 0;
-
-        public TriangleSampler(TriangleNetMesh triangleNetMesh)
-            : this(triangleNetMesh, new Random(RANDOM_SEED))
-        {
-        }
 
         public TriangleSampler(TriangleNetMesh triangleNetMesh, Random random)
         {
@@ -46,8 +39,8 @@ namespace TriangleNet
         /// </summary>
         public void Reset()
         {
-            this.samples = 1;
-            this.triangleCount = 0;
+            samples = 1;
+            triangleCount = 0;
         }
 
         /// <summary>

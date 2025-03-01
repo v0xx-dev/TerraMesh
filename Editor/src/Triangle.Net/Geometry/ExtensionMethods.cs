@@ -56,6 +56,18 @@ namespace TriangleNet.Geometry
             return (new GenericMesher(triangulator)).Triangulate(polygon, options, quality);
         }
 
+        /// <summary>
+        /// Triangulates a polygon, applying quality and constraint options.
+        /// </summary>
+        /// <param name="options">Constraint options.</param>
+        /// <param name="quality">Quality options.</param>
+        /// <param name="config">Advanced configuration settings.</param>
+        public static IMesh Triangulate(this IPolygon polygon, ConstraintOptions options, QualityOptions quality,
+            Configuration config)
+        {
+            return (new GenericMesher(config)).Triangulate(polygon, options, quality);
+        }
+
         #endregion
 
         #region Rectangle extensions

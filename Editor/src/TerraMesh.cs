@@ -10,6 +10,7 @@ using TriangleNet.Unity;
 using TriangleNet.Smoothing;
 using TerraMesh.Utils;
 using System.Threading.Tasks;
+using TriangleNet;
 
 
 #if UNITY_EDITOR
@@ -1136,7 +1137,7 @@ namespace TerraMesh
         /// The mesh terrain is parented to the same GameObject as the Terrain object, and has the same layer, tag, and rendering layer mask.
         /// </remarks>
         /// <exception cref="System.ArgumentNullException">Thrown if `terrain` is null.</exception>
-        public static GameObject Meshify(this Terrain terrain, TerraMeshConfig config)
+        public static GameObject? Meshify(this Terrain terrain, TerraMeshConfig config)
         {
             if (terrain == null)
             {
@@ -1148,7 +1149,8 @@ namespace TerraMesh
             GenerateMeshData(config, meshTerrainData);
 
             GameObject meshTerrain = terrain.Meshify(config, meshTerrainData);
-
+            
+            Debug.LogDebug($"Mesh terrain created from {terrain.name}. Valid: {meshTerrain != null}");         
             return meshTerrain;
         }
 
@@ -1166,6 +1168,7 @@ namespace TerraMesh
 
             GameObject meshTerrain = terrain.Meshify(config, meshTerrainData);
 
+            Debug.LogDebug($"Mesh terrain created from {terrain.name}. Valid: {meshTerrain != null}");
             return meshTerrain;
         }
 
@@ -1386,6 +1389,7 @@ namespace TerraMesh
                 Debug.LogDebug($"Terrain data: {terrainData}");
 #endif
 
+            sw.Start();
             if (config.useBounds && config.levelBounds != null) // Use the level bounds to determine the mesh density
             {
                 terrainData.terrainBounds.center += terrainData.terrainPosition;
@@ -1407,7 +1411,6 @@ namespace TerraMesh
                 List<QuadTree> leafNodes = new List<QuadTree>();
                 rootNode.GetLeafNodes(leafNodes);
 
-                sw.Start();
 
                 foreach (var node in leafNodes)
                 {
@@ -1446,11 +1449,9 @@ namespace TerraMesh
                         }
                     }
                 }
-                sw.Stop();
             }
             else // Uniform meshing if no level bounds are set
             {
-                sw.Start();
                 int minMeshStep = config.minMeshStep;
                 // Calculate density factor to achieve target vertex count
                 if (config.targetVertexCount > 0)
@@ -1498,19 +1499,17 @@ namespace TerraMesh
                                 }
                             }
                         }
-
-                        
                     }
                 }
-
-                sw.Stop();
             }
 
-            Debug.LogDebug($"Sampled vertices: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
+            sw.Stop();
+            Debug.LogDebug($"Sampled vertices for {terrainData.name}: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
 
             var polygon = new Polygon();
 
             // Iterate in a loop over the perimeter of the terrain heightmap and add the edges to the polygon to prevent seams between terrain cells
+            int edgeCount = 4 * (terrainData.heightmapResolution - 1);
             for (int i = 0; i < terrainData.heightmapResolution - 1; i++)
             {
                 for (int edgeInd = 0; edgeInd < 4; edgeInd++)
@@ -1538,9 +1537,8 @@ namespace TerraMesh
                     Vertex nextVert = v2.ToTriangleNetVertex(uv2, 1);
 
                     Segment outerEdge = new Segment(vert, nextVert);
-                    polygon.Add(outerEdge);
+                    polygon.Add(outerEdge, true);
 
-                    UnityEngine.Debug.DrawLine(v1, v2, Color.red, 10);
                     // Prevent duplicate vertices
                     // We only check the first vertex of the edge since the second one will be considered on the next iteration
                     if (uniqueVertices.Add(v1)) 
@@ -1570,16 +1568,25 @@ namespace TerraMesh
             }
 
             // Configure triangulation options
-            int maxAdditionalVertices = Mathf.Min(terrainData.vertices.Count / 4, 30000);
+            int maxAdditionalVertices = Mathf.Clamp(terrainData.vertices.Count / 4 + edgeCount, 1000, 30000);
             ConstraintOptions options = new ConstraintOptions() { ConformingDelaunay = false, SegmentSplitting = 2 };
             QualityOptions quality = new QualityOptions() { MinimumAngle = 20.0f, SteinerPoints = config.refineMesh ? maxAdditionalVertices : 0 };
+            
+            var pool = new TrianglePool();
+            var predicates = new RobustPredicates();
+            var triangConfig = new Configuration()
+            {
+                Predicates = () => predicates,
+                TrianglePool = () => pool.Restart(),
+                RandomSource = () => ThreadSafeRandom.Instance
+            };
 
             // Perform triangulation
             sw.Restart();
-            var mesh2d = polygon.Triangulate(options, quality);
+            var mesh2d = polygon.Triangulate(options, quality, triangConfig);
             sw.Stop();
-            Debug.LogDebug("Triangulation time: " + sw.ElapsedMilliseconds + "ms");
-            Debug.LogDebug("Final vertices: " + mesh2d.Vertices.Count);
+            Debug.LogDebug($"Triangulation time for {terrainData.name}: {sw.ElapsedMilliseconds} ms");
+            Debug.LogDebug($"Final vertices for {terrainData.name}: {mesh2d.Vertices.Count}");
 
             // Convert the 2D mesh to Unity mesh
             terrainData.vertices = new List<Vector3>();
@@ -1626,7 +1633,7 @@ namespace TerraMesh
                 terrainData.triangles.Add(vertexIDs[v1]);
             }
 
-            Debug.LogDebug("Generated triangles: " + terrainData.triangles.Count);
+            Debug.LogDebug($"Generated triangles for {terrainData.name}: {terrainData.triangles.Count}");
         }
 
 #if UNITY_EDITOR

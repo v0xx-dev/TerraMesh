@@ -7,6 +7,8 @@
 
 namespace TriangleNet
 {
+    using System;
+
     using TriangleNet.Geometry;
     using TriangleNet.Topology;
 
@@ -24,26 +26,26 @@ namespace TriangleNet
     /// </remarks>
     public class TriangleLocator
     {
-        TriangleSampler sampler;
-        TriangleNetMesh _TriangleNetMesh;
-
-        IPredicates predicates;
+        private readonly TriangleSampler sampler;
+        private readonly TriangleNetMesh _TriangleNetMesh;
+        private readonly IPredicates predicates;
 
         // Pointer to a recently visited triangle. Improves point location if
         // proximate vertices are inserted sequentially.
         internal Otri recenttri;
 
-        public TriangleLocator(TriangleNetMesh triangleNetMesh)
-            : this(triangleNetMesh, RobustPredicates.Default)
-        {
-        }
-
-        public TriangleLocator(TriangleNetMesh triangleNetMesh, IPredicates predicates)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TriangleLocator" /> class.
+        /// </summary>
+        /// <param name="mesh">The mesh.</param>
+        /// <param name="predicates">The predicates.</param>
+        /// <param name="random">The random source used in <see cref="TriangleSampler" />.</param>
+        public TriangleLocator(TriangleNetMesh triangleNetMesh, IPredicates predicates, Random random)
         {
             this._TriangleNetMesh = triangleNetMesh;
             this.predicates = predicates;
 
-            sampler = new TriangleSampler(triangleNetMesh);
+            sampler = new TriangleSampler(triangleNetMesh, random);
         }
 
         /// <summary>

@@ -29,6 +29,7 @@ namespace TriangleNet
         {
             Predicates = predicates;
             TrianglePool = trianglePool;
+            RandomSource = () => new Random();
         }
 
         /// <summary>
@@ -40,5 +41,10 @@ namespace TriangleNet
         /// Gets or sets the factory method for the <see cref="TrianglePool"/>.
         /// </summary>
         public Func<TrianglePool> TrianglePool { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the factory method for a <see cref="Random"/> source.
+        /// </summary>
+        public Func<Random> RandomSource { get; set; }
     }
 }

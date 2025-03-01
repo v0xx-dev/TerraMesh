@@ -233,6 +233,34 @@ namespace TerraMesh.Utils
             }
         }
 
+        // For backwards compatibility
+        public TerraMeshConfig(Bounds? levelBounds = null,
+                            bool useBounds = false,
+                            bool constrainEdges = true,
+                            bool subdivideMesh = true,
+                            float baseEdgeLength = 5f,
+                            bool smoothMesh = true,
+                            int smoothingIterations = 1,
+                            bool replaceUvs = false,
+                            bool onlyUVs = false,
+                            uint renderingLayerMask = 0,
+                            int minMeshStep = 1,
+                            int maxMeshStep = 32,
+                            float falloffSpeed = 3f,
+                            int targetVertexCount = -1,
+                            bool carveHoles = true,
+                            bool refineMesh = true,
+                            bool useMeshCollider = false,
+                            bool copyTrees = false,
+                            bool copyDetail = false,
+                            Shader? terraMeshShader = null)
+        : this(levelBounds, useBounds, constrainEdges, subdivideMesh, baseEdgeLength, smoothMesh,
+               smoothingIterations, replaceUvs, onlyUVs, renderingLayerMask, minMeshStep, maxMeshStep,
+               falloffSpeed, targetVertexCount, carveHoles, refineMesh, useMeshCollider, copyTrees,
+               copyDetail, true, 1023, terraMeshShader)
+        {
+        }
+
         public override readonly string ToString()
         {
             return $"TerraMeshConfig:\n" +
@@ -307,6 +335,7 @@ namespace TerraMesh.Utils
         public float uvStepZ;
         public Vector3 terrainPosition;
         public Bounds terrainBounds;
+        public string name;
 
         public MeshifyTerrainData(Terrain terrain)
         {
@@ -362,6 +391,8 @@ namespace TerraMesh.Utils
 
             terrainPosition = terrain.transform.position;
             terrainBounds = terrain.terrainData.bounds;
+
+            name = terrain.name;
         }
 
         public override string ToString()
