@@ -24,10 +24,9 @@ It has two ways of meshing:
 
 - **Falloff factor** regulates how fast the step size changes.
 - Use **refine mesh** option if you see very thin triangles appearing, this can happen if your terrain is rectangular or a very high falloff used with big maximum step, realistically this should be disabled in most cases.
-- **Copy trees** toogle will save trees from your terrain as separate objects
+- **Copy trees** toggle will save trees from your terrain as separate objects
 - **Carve holes** toggle will carve holes in the mesh if they exist in your terrain. 
-
-Grass is NOT supported, probably won't be.
+- **Copy detail** toggle will copy terrain detail as game objects or will use a special instanced renderer (if the corresponding option is enabled)
 
 ## **Performance considerations!**
 
