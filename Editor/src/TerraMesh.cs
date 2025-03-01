@@ -20,34 +20,32 @@ using System.IO;
 namespace TerraMesh
 {
 #if UNITY_EDITOR
+    using UnityEditor;
+    using UnityEngine;
+    using System;
+    using System.IO;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Runtime.CompilerServices;
+
     public class TerraMesh : EditorWindow
     {
-        [Tooltip("The Terrain object to convert to a mesh.")]
-        private Terrain terrain;
-        [Tooltip("The BoxCollider object representing the level bounds.")]
-        private BoxCollider levelBounds;
-        [Tooltip("The minimum mesh step size. Smaller values result in higher resolution meshes.")]
+        private List<Terrain> terrains = new List<Terrain>();
+        private BoxCollider? levelBounds;
         private int minMeshStep = 1;
-        [Tooltip("The maximum mesh step size.")]
         private int maxMeshStep = 16;
-        [Tooltip("How quickly the mesh step size transitions from min to max step size with distance from the level bounds.")]
         private float falloffSpeed = 2f;
-        [Tooltip("Refine the mesh by subdividing thin triangles.")]
         private bool refineMesh = true;
-        [Tooltip("Use a mesh collider for the mesh terrain.")]
         private bool useMeshCollider = true;
-        [Tooltip("Carve holes in the mesh terrain.")]
         private bool carveHoles = true;
-        [Tooltip("Copy trees from the terrain to the mesh terrain.")]
         private bool copyTrees = false;
         private bool copyDetail = false;
-        
+        private bool useDetailGPUInstancing = true;
+        private int instancedDetailBatchSize = 1024;
         private int targetVertexCount = -1;
 
-        
-
         private string saveFolderPath = "Assets/TerrainMeshes"; // Default save folder
-        private GameObject meshTerrain;
+        private List<GameObject> meshTerrains = new List<GameObject>();
 
         [MenuItem("Tools/TerraMesh")]
         public static void ShowWindow()
@@ -57,12 +55,36 @@ namespace TerraMesh
 
         private void OnGUI()
         {
-            EditorGUILayout.LabelField("Basic Settings", EditorStyles.boldLabel);
-            
-            EditorGUILayout.BeginHorizontal();
-            saveFolderPath = EditorGUILayout.TextField("Save Folder", saveFolderPath);
+            EditorGUILayout.LabelField("Terrains", EditorStyles.boldLabel);
 
-            if (GUILayout.Button("Browse", GUILayout.Width(60)))
+            // Display existing terrains and allow removal
+            for (int i = 0; i < terrains.Count; i++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                // Tooltip for each Terrain object field
+                GUIContent terrainContent = new GUIContent("Terrain " + (i + 1), "The Terrain object to convert to a mesh.");
+                terrains[i] = (Terrain)EditorGUILayout.ObjectField(terrainContent, terrains[i], typeof(Terrain), true);
+                if (GUILayout.Button(new GUIContent("Remove", "Remove this terrain from the list."), GUILayout.Width(60)))
+                {
+                    terrains.RemoveAt(i);
+                    i--; // Adjust index after removal
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+
+            // Button to add a new terrain slot
+            if (GUILayout.Button(new GUIContent("Add Terrain", "Add a new terrain to the list.")))
+            {
+                terrains.Add(null!); // Add a null entry, which will be filled by the ObjectField
+            }
+
+            EditorGUILayout.LabelField("General Settings", EditorStyles.boldLabel);
+            EditorGUILayout.BeginHorizontal();
+            // Tooltip for the Save Folder field
+            GUIContent saveFolderContent = new GUIContent("Save Folder", "The folder where the generated meshes and materials will be saved.");
+            saveFolderPath = EditorGUILayout.TextField(saveFolderContent, saveFolderPath);
+
+            if (GUILayout.Button(new GUIContent("Browse", "Browse for a save folder."), GUILayout.Width(60)))
             {
                 string selectedPath = EditorUtility.OpenFolderPanel("Select Save Folder", saveFolderPath, "");
                 if (!string.IsNullOrEmpty(selectedPath))
@@ -79,31 +101,84 @@ namespace TerraMesh
                     }
                 }
             }
+
             EditorGUILayout.EndHorizontal();
 
-            terrain = (Terrain)EditorGUILayout.ObjectField("Terrain", terrain, typeof(Terrain), true);
-            levelBounds = (BoxCollider)EditorGUILayout.ObjectField("Level Bounds", levelBounds, typeof(BoxCollider), true);
+            // Tooltip for the Level Bounds field
+            GUIContent levelBoundsContent = new GUIContent("Level Bounds", "The BoxCollider representing the playable area where terrain mesh density will be highest.");
+            levelBounds = (BoxCollider)EditorGUILayout.ObjectField(levelBoundsContent, levelBounds, typeof(BoxCollider), true);
+
+            if (levelBounds == null)
+            {
+                EditorGUILayout.HelpBox("Level bounds are not set! Uniform meshing will be applied. This is NOT recommended as it will decrease in-game performance due to redundant polygons!", MessageType.Warning);
+            }
             //targetVertexCount = EditorGUILayout.IntField("Target Vertex Count", targetVertexCount);
             EditorGUILayout.LabelField("Sampling Settings", EditorStyles.boldLabel);
-            minMeshStep = EditorGUILayout.IntField("Minimum Mesh Step", minMeshStep);
+
+            // Tooltip for the Minimum Mesh Step field
+            GUIContent minMeshStepContent = new GUIContent("Minimum Mesh Step", "The smallest step size for mesh generation. Smaller values result in higher resolution, but more vertices.");
+            minMeshStep = EditorGUILayout.IntSlider(minMeshStepContent, minMeshStep, 1, 100);
+
             if (levelBounds != null)
             {
-                maxMeshStep = EditorGUILayout.IntField("Maximum Mesh Step", maxMeshStep);
-                falloffSpeed = EditorGUILayout.FloatField("Falloff Speed", falloffSpeed);
-                refineMesh = EditorGUILayout.Toggle("Refine Mesh", refineMesh);
+                // Tooltip for the Maximum Mesh Step field
+                GUIContent maxMeshStepContent = new GUIContent("Maximum Mesh Step", "The largest step size for mesh generation.");
+                maxMeshStep = EditorGUILayout.IntSlider(maxMeshStepContent, maxMeshStep, minMeshStep + 1, 100);
+
+                // Tooltip for the Falloff Speed field
+                GUIContent falloffSpeedContent = new GUIContent("Falloff Speed", "Controls how quickly the mesh step size transitions from minimum to maximum.");
+                falloffSpeed = EditorGUILayout.Slider(falloffSpeedContent, falloffSpeed, 1e-8f, 100f);
+
+                // Tooltip for the Refine Mesh toggle
+                GUIContent refineMeshContent = new GUIContent("Refine Mesh", "Subdivide thin triangles to improve mesh quality.");
+                refineMesh = EditorGUILayout.Toggle(refineMeshContent, refineMesh);
             }
             EditorGUILayout.LabelField("Copy Settings", EditorStyles.boldLabel);
-            useMeshCollider = EditorGUILayout.Toggle("Mesh Collider", useMeshCollider);
-            carveHoles = EditorGUILayout.Toggle("Carve Holes", carveHoles);
-            copyTrees = EditorGUILayout.Toggle("Copy Trees", copyTrees);
-            //copyDetail = EditorGUILayout.Toggle("Copy Detail", copyDetail);
 
-            if (GUILayout.Button("Turn to Mesh"))
+            // Tooltip for the Mesh Collider toggle
+            GUIContent useMeshColliderContent = new GUIContent("Mesh Collider", "Use a mesh collider for the generated terrain mesh.");
+            useMeshCollider = EditorGUILayout.Toggle(useMeshColliderContent, useMeshCollider);
+
+            // Tooltip for the Carve Holes toggle
+            GUIContent carveHolesContent = new GUIContent("Carve Holes", "Create holes in the mesh where the terrain has holes.");
+            carveHoles = EditorGUILayout.Toggle(carveHolesContent, carveHoles);
+
+            // Tooltip for the Copy Trees toggle
+            GUIContent copyTreesContent = new GUIContent("Copy Trees", "Copy tree instances from the terrain to the mesh.");
+            copyTrees = EditorGUILayout.Toggle(copyTreesContent, copyTrees);
+
+            // Tooltip for the Copy Detail toggle 
+            GUIContent copyDetailContent = new GUIContent("Copy Detail", "Copy detail objects (grass, etc.) from the terrain to the mesh.");
+            copyDetail = EditorGUILayout.Toggle(copyDetailContent, copyDetail);
+
+            if (copyDetail)
             {
-                
-                if (meshTerrain != null)
+                // Tooltip for the Use Detail GPU Instancing toggle
+                GUIContent useDetailGPUInstancingContent = new GUIContent("Use Detail GPU Instancing", "Use GPU instancing for detail objects for improved performance.");
+                useDetailGPUInstancing = EditorGUILayout.Toggle(useDetailGPUInstancingContent, useDetailGPUInstancing);
+                if (useDetailGPUInstancing)
                 {
-                    DestroyImmediate(meshTerrain);
+                    // Tooltip for the Instanced Detail Batch Size field
+                    GUIContent instancedDetailBatchSizeContent = new GUIContent("Instanced Detail Batch Size", "The maximum number of detail objects per batch.");
+                    instancedDetailBatchSize = EditorGUILayout.IntField(instancedDetailBatchSizeContent, instancedDetailBatchSize);
+                    // Show warning that instancing will require adding TerraMesh as a package dependency
+                    EditorGUILayout.HelpBox("GPU instancing will require adding TerraMesh as a package dependency since it uses a custom Renderer!", MessageType.Warning);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("Detail objects will be copied as regular GameObjects, which may impact performance if there are too many! Adding LOD Groups is recommended!", MessageType.Info);
+                }
+            }
+
+            if (GUILayout.Button(new GUIContent("Turn to Mesh", "Convert the selected terrains to meshes.")))
+            {
+                if (meshTerrains.Count != 0)
+                {
+                    foreach (GameObject meshTerrain in meshTerrains)
+                    {
+                        DestroyImmediate(meshTerrain);
+                    }
+                    meshTerrains.Clear();
                 }
 
                 if (ValidateSettings())
@@ -116,40 +191,47 @@ namespace TerraMesh
                         return;
                     }
 
-                    string currentTime = DateTime.Now.ToString("ddMHHmmss"); 
-                    string terrainFolderPath = Path.Combine(saveFolderPath, terrain.name + "_" + currentTime); // Subfolder for the terrain
+                    foreach (Terrain terrain in terrains)
+                    {
+                        string currentTime = DateTime.Now.ToString("ddMMyyyy_HHmmss");
+                        string terrainFolderPath = Path.Combine(saveFolderPath, terrain.name + "_" + currentTime); // Subfolder for the terrain
 
-                    // Create subfolder if it doesn't exist
-                    Directory.CreateDirectory(terrainFolderPath);
+                        // Create subfolder if it doesn't exist
+                        Directory.CreateDirectory(terrainFolderPath);
 
-                    TerraMeshConfig config = new TerraMeshConfig(
-                        levelBounds : levelBounds?.bounds,
-                        useMeshCollider : useMeshCollider,
-                        targetVertexCount : targetVertexCount,
-                        minMeshStep : minMeshStep,
-                        maxMeshStep : maxMeshStep,
-                        falloffSpeed : falloffSpeed,
-                        refineMesh : refineMesh,
-                        carveHoles : carveHoles,
-                        copyTrees : copyTrees,
-                        copyDetail : copyDetail,
-                        terraMeshShader : terraMeshShader
-                    );
+                        TerraMeshConfig config = new TerraMeshConfig(
+                            levelBounds: levelBounds?.bounds,
+                            useBounds: levelBounds != null,
+                            useMeshCollider: useMeshCollider,
+                            targetVertexCount: targetVertexCount,
+                            minMeshStep: minMeshStep,
+                            maxMeshStep: maxMeshStep,
+                            falloffSpeed: falloffSpeed,
+                            refineMesh: refineMesh,
+                            carveHoles: carveHoles,
+                            copyTrees: copyTrees,
+                            copyDetail: copyDetail,
+                            useDetailInstancing: useDetailGPUInstancing,
+                            detailInstancingBatchSize: instancedDetailBatchSize,
+                            terraMeshShader: terraMeshShader
+                        );
 
-                    meshTerrain = terrain.Meshify(config);
+                        GameObject meshTerrain = terrain.Meshify(config);
 
-                    string materialPath = Path.Combine(terrainFolderPath, terrain.name + "_Lit.mat");
-                    Material terrainMaterial = new Material(terraMeshShader); 
-                    AssetDatabase.CreateAsset(terrainMaterial, materialPath);
-                    meshTerrain.GetComponent<MeshRenderer>().sharedMaterial = terrainMaterial;
-                    
-                    terrainMaterial.SetupMaterialFromTerrain(terrain, terrainFolderPath);
+                        string materialPath = Path.Combine(terrainFolderPath, terrain.name + "_Lit.mat");
+                        Material terrainMaterial = new Material(terraMeshShader);
+                        AssetDatabase.CreateAsset(terrainMaterial, materialPath);
+                        meshTerrain.GetComponent<MeshRenderer>().sharedMaterial = terrainMaterial;
+                        meshTerrains.Add(meshTerrain);
 
-                    string meshPath = Path.Combine(terrainFolderPath, terrain.name + "_Mesh.asset");
-                    AssetDatabase.CreateAsset(meshTerrain.GetComponent<MeshFilter>().sharedMesh, meshPath);
+                        terrainMaterial.SetupMaterialFromTerrain(terrain, terrainFolderPath);
 
-                    string prefabPath = Path.Combine(terrainFolderPath, terrain.name + ".prefab");
-                    PrefabUtility.SaveAsPrefabAsset(meshTerrain, prefabPath);
+                        string meshPath = Path.Combine(terrainFolderPath, terrain.name + "_Mesh.asset");
+                        AssetDatabase.CreateAsset(meshTerrain.GetComponent<MeshFilter>().sharedMesh, meshPath);
+
+                        string prefabPath = Path.Combine(terrainFolderPath, terrain.name + ".prefab");
+                        PrefabUtility.SaveAsPrefabAsset(meshTerrain, prefabPath);
+                    }
                 }
 
             }
@@ -157,9 +239,15 @@ namespace TerraMesh
 
         private bool ValidateSettings()
         {
-            if (terrain == null)
+            if (terrains.Count == 0)
             {
-                Debug.LogError("Terrain is not set!");
+                Debug.LogError("No terrains are selected!");
+                return false;
+            }
+
+            if (terrains.Any(t => t == null))
+            {
+                Debug.LogError("One or more terrain slots are empty!");
                 return false;
             }
             if (levelBounds == null)
@@ -179,6 +267,160 @@ namespace TerraMesh
     }
 #endif
 
+    [ExecuteInEditMode]
+    public class InstancedGrassRenderer : MonoBehaviour
+    {
+        [Tooltip("Maximum number of instances per batch, lower values will increase draw calls, but will allow better culling.")]
+        public int maxBatchSize = 1024;
+        //[Tooltip("Culling distance squared, batches further than this distance will not be rendered.")]
+        // public int cullingDistanceSqr = 1000;
+        public string layerName = "Foliage";
+        public ShadowCastingMode shadowCastingMode = ShadowCastingMode.Off;
+        public bool receiveShadows = true;
+        public bool activeTransformSync = false;
+        [HideInInspector]
+        public int layerInd = 0;
+        [HideInInspector]
+        public bool isValidated = false;
+        private Matrix4x4 oldTransform;
+        public List<InstancedDetailBatch> detailInstanceData = new List<InstancedDetailBatch>();
+
+        void Start()
+        {
+            oldTransform = transform.localToWorldMatrix;
+        }
+
+        public void StoreBatch(List<Matrix4x4> matrixBatch, DetailPrototype detailPrototype)
+        {
+            Mesh mesh = detailPrototype.prototype.GetComponent<MeshFilter>().sharedMesh;
+            Material material = detailPrototype.prototype.GetComponent<MeshRenderer>().sharedMaterial;
+            material.enableInstancing = true;
+            Matrix4x4[] matrices = matrixBatch.ToArray();
+            Bounds batchBounds = CalculateBounds(matrices);
+            InstancedDetailBatch instancedDetailData = new InstancedDetailBatch
+            {
+                material = material,
+                mesh = mesh,
+                matrices = matrices,
+                batchBounds = batchBounds
+            };
+            detailInstanceData.Add(instancedDetailData);
+        }
+
+        private void OnValidate()
+        {
+            isValidated = false;
+            if (detailInstanceData == null) return;
+            foreach (var detailType in detailInstanceData)
+            {
+                if (detailType == null)
+                {
+                    Debug.LogError("Detail type is null!");
+                    return;
+                }
+                if (detailType.matrices == null)
+                {
+                    Debug.LogError("Matrices list is null!");
+                    return;
+                }
+                if (detailType.matrices.Length == 0)
+                {
+                    Debug.LogError("Matrix batch is empty!");
+                    return;
+                }
+                if (detailType.matrices.Length > maxBatchSize)
+                {
+                    Debug.LogError("Matrix batch size exceeds maximum allowed instances per batch!");
+                    return;
+                }
+                if (detailType.mesh == null)
+                {
+                    Debug.LogError("Mesh is null!");
+                    return;
+                }
+                if (detailType.material == null)
+                {
+                    Debug.LogError("Material is null!");
+                    return;
+                }
+                if (detailType.batchBounds.size == Vector3.zero)
+                {
+                    Debug.LogError("Batch bounds are zero!");
+                    return;
+                }
+            }
+            layerInd = LayerMask.NameToLayer(layerName);
+            gameObject.layer = layerInd;
+            SyncTransforms();
+            isValidated = true;
+        }
+
+        void SyncTransforms()
+        {
+            //Get current transforms of the parent object
+            Matrix4x4 newTransform = transform.localToWorldMatrix;
+            if (oldTransform == newTransform) return;
+            Matrix4x4 invOldTransform = oldTransform.inverse;
+            Matrix4x4 adjustedTransform = newTransform * invOldTransform;
+            oldTransform = newTransform;
+            foreach (var detailType in detailInstanceData)
+            {
+                //Apply the parent object's transform to the matrices
+                for (int i = 0; i < detailType.matrices.Length; i++)
+                {
+                    detailType.matrices[i] = adjustedTransform * detailType.matrices[i];
+                }
+                // Only adjust the center of the bounds, we don't consider scaling transforms currently
+                detailType.batchBounds.center = adjustedTransform.MultiplyPoint(detailType.batchBounds.center);
+            }
+        }
+
+        private Bounds CalculateBounds(Matrix4x4[] matrices)
+        {
+            if (matrices.Length == 0)
+            {
+                return new Bounds(Vector3.zero, Vector3.zero);
+            }
+
+            Vector3 position = matrices[0].GetColumn(3);
+            Bounds bounds = new Bounds(position, Vector3.zero);
+            for (int i = 1; i < matrices.Length; i++)
+            {
+                bounds.Encapsulate(matrices[i].GetColumn(3));
+            }
+            return bounds;
+        }
+
+        void Update()
+        {
+            if (!isValidated)
+            {
+                Debug.LogError("Invalid data! Please validate the data before rendering.");
+                return;
+            }
+
+            if (activeTransformSync)
+            {
+                SyncTransforms();
+            }
+
+            foreach (var detailType in detailInstanceData)
+            {
+                // if (Vector3.SqrMagnitude(detailType.Center - Camera.main.transform.position) > cullingDistanceSqr)
+                //    continue;
+
+                Graphics.DrawMeshInstanced(detailType.mesh,
+                0,
+                detailType.material,
+                detailType.matrices,
+                detailType.matrices.Length,
+                null,
+                shadowCastingMode,
+                receiveShadows,
+                layerInd);
+            }
+        }
+    }
     public static class TerraMeshExtensions
     {
         /// <summary>
@@ -927,6 +1169,90 @@ namespace TerraMesh
             return meshTerrain;
         }
 
+        public static GameObject? CopyDetails(this Terrain terrain, bool useInstanceRenderer = false, int batchSize = 1023)
+        {
+            TerrainData terrainData = terrain.terrainData;
+            Vector3 terrainPos = terrain.transform.position;
+            Vector3 terrainSize = terrainData.size;
+
+            if (terrainData.detailPrototypes.Length == 0)
+            {
+                Debug.LogError("No detail prototypes found on terrain.");
+                return null;
+            }
+
+            Transform grassParent = new GameObject("Grass").transform;
+            grassParent.localPosition = Vector3.zero;
+            grassParent.rotation = Quaternion.identity;
+            grassParent.localScale = new Vector3(1, 1, 1);
+
+            Debug.Log("Detail Prototypes: " + terrainData.detailPrototypes.Length);
+            Debug.Log("Number of detail patches: " + terrainData.detailPatchCount + "x" + terrainData.detailPatchCount);
+            InstancedGrassRenderer? instancedGrassRenderer = null;
+            int placedDetails = 0;
+            
+            if (useInstanceRenderer)
+            {
+                instancedGrassRenderer = grassParent.gameObject.AddComponent<InstancedGrassRenderer>();
+                instancedGrassRenderer.maxBatchSize = batchSize;
+            }
+
+            for (int d = 0; d < terrainData.detailPrototypes.Length; d++)
+            {
+                DetailPrototype detailPrototype = terrainData.detailPrototypes[d];
+                float terrainDensity = detailPrototype.useDensityScaling ? terrain.detailObjectDensity : 1f;
+                List<Matrix4x4> matrixBatch = new List<Matrix4x4>();
+                for (int x = 0; x < terrainData.detailPatchCount; x++)
+                {
+                    for (int z = 0; z < terrainData.detailPatchCount; z++)
+                    {
+                        DetailInstanceTransform[] patchDetails = terrainData.ComputeDetailInstanceTransforms(x, z, d, terrainDensity, out _);
+
+                        foreach (var detailTransform in patchDetails)
+                        {
+                            Vector3 localPos = new Vector3(detailTransform.posX, detailTransform.posY, detailTransform.posZ);
+                            Quaternion localRot = Quaternion.Euler(0, detailTransform.rotationY * Mathf.Rad2Deg, 0);
+                            Vector3 localScale = new Vector3(detailTransform.scaleXZ, detailTransform.scaleY, detailTransform.scaleXZ);
+
+                            float normX = localPos.x / terrainSize.x;
+                            float normZ = localPos.z / terrainSize.z;
+                            Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+                            Quaternion alignWithTerrain = Quaternion.FromToRotation(Vector3.up, normal);
+                            alignWithTerrain = Quaternion.Slerp(Quaternion.identity, alignWithTerrain, detailPrototype.alignToGround);
+                            Quaternion finalRot = alignWithTerrain * localRot;
+
+                            if (useInstanceRenderer)
+                            {
+                                Matrix4x4 matrix = Matrix4x4.TRS(localPos + terrainPos, finalRot, localScale);
+                                if (matrixBatch.Count >= batchSize)
+                                {
+                                    instancedGrassRenderer?.StoreBatch(matrixBatch, detailPrototype);
+                                    matrixBatch.Clear();
+                                }
+                                matrixBatch.Add(matrix);
+                            }
+                            else
+                            {
+                                var detail = GameObject.Instantiate(detailPrototype.prototype, localPos + terrainPos, finalRot, grassParent);
+                                detail.transform.localScale = localScale;
+                                detail.isStatic = true;
+                            }
+                            placedDetails++;
+                        }
+                    }
+                }
+
+                if (useInstanceRenderer && matrixBatch.Count > 0)
+                {
+                    instancedGrassRenderer?.StoreBatch(matrixBatch, detailPrototype);
+                }
+            }
+
+            Debug.Log($"Placed {placedDetails} details");
+
+            return grassParent.gameObject;
+        }
+
         private static GameObject Meshify(this Terrain terrain, TerraMeshConfig config, MeshifyTerrainData meshTerrainData)
         {
             Vector3[] vertices = meshTerrainData.vertices!.ToArray();
@@ -1020,42 +1346,10 @@ namespace TerraMesh
 
             if (config.copyDetail)
             {
-                Transform grassParent = new GameObject("Grass").transform;
-                grassParent.parent = meshTerrain.transform;
-
-                var terrainData = terrain.terrainData;
-                var scaleX = terrainData.size.x / terrainData.detailWidth;
-                var scaleZ = terrainData.size.z / terrainData.detailHeight;
-                Debug.LogDebug("Detail Prototypes: " + terrainData.detailPrototypes.Length);
-
-                for (int d = 0; d < terrainData.detailPrototypes.Length; d++)
+                GameObject? grassContainer = terrain.CopyDetails(config.useDetailInstancing, config.detailInstancingBatchSize);
+                if (grassContainer != null)
                 {
-                    var detailPrototype = terrainData.detailPrototypes[d];
-                    var detailLayer = terrainData.GetDetailLayer(0, 0, terrainData.detailWidth, terrainData.detailHeight, d);
-                    float targetDensity = detailPrototype.density;
-                    Debug.LogDebug("Target Coverage: " + detailPrototype.targetCoverage);
-                    for (int x = 0; x < terrainData.detailWidth; x++)
-                    {
-                        for (int y = 0; y < terrainData.detailHeight; y++)
-                        {
-                            var layerDensity = detailLayer[y, x] / 255f;
-                            float posX = x * scaleX + terrain.transform.position.x;
-                            float posZ = y * scaleZ + terrain.transform.position.z;
-                            float perlinNoise = Mathf.PerlinNoise(posX, posZ);
-                            if (perlinNoise * layerDensity * targetDensity > 0.9f)
-                            {
-                                //Debug.Log("Density factor: " + perlinNoise * layerDensity * targetDensity);
-                                var pos = new Vector3(posX, 0, posZ);
-                                pos.y = terrain.SampleHeight(pos);
-                                var detail = GameObject.Instantiate(terrainData.detailPrototypes[d].prototype, pos, Quaternion.Euler(0, UnityEngine.Random.Range(0, 359), 0), grassParent);
-
-                                var scale = UnityEngine.Random.Range(detailPrototype.minWidth, detailPrototype.maxWidth);
-                                var height = UnityEngine.Random.Range(detailPrototype.minHeight, detailPrototype.maxHeight);
-                                detail.transform.localScale = new Vector3(scale, height, scale);
-                            }
-
-                        }
-                    }
+                    grassContainer.transform.SetParent(meshTerrain.transform);
                 }
             }
 
@@ -1084,6 +1378,7 @@ namespace TerraMesh
             
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
+            HashSet<Vector3> uniqueVertices = new HashSet<Vector3>();
             HashSet<Vector3> holeVertices = new HashSet<Vector3>();
 
 #if DEBUG
@@ -1109,7 +1404,6 @@ namespace TerraMesh
                                     config.maxMeshStep, config.falloffSpeed, maxDistance);
 
                 // Generate vertices from 4 corners of leaf nodes of the quadtree
-                HashSet<Vector3> uniqueVertices = new HashSet<Vector3>();
                 List<QuadTree> leafNodes = new List<QuadTree>();
                 rootNode.GetLeafNodes(leafNodes);
 
@@ -1152,77 +1446,7 @@ namespace TerraMesh
                         }
                     }
                 }
-
                 sw.Stop();
-                Debug.LogDebug($"Sampled vertices: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
-
-                var polygon = new Polygon();
-
-                //Insert edge vertices of the terrain as segments to the polygon
-                
-
-                for (int i = 0; i < terrainData.vertices.Count; i++)
-                {
-                    Vertex triNetVertex = terrainData.vertices[i].ToTriangleNetVertex(terrainData.uvs[i], 1);
-                    polygon.Add(triNetVertex);
-                }
-
-                // Configure triangulation options
-                int maxAdditionalVertices = Mathf.Min(terrainData.vertices.Count / 4, 30000);
-                ConstraintOptions options = new ConstraintOptions() { ConformingDelaunay = false, SegmentSplitting = 2 };
-                QualityOptions quality = new QualityOptions() { MinimumAngle = 20.0f, SteinerPoints = config.refineMesh ? maxAdditionalVertices : 0 };
-
-                // Perform triangulation
-                sw.Restart();
-                var mesh2d = polygon.Triangulate(options, quality);
-                sw.Stop();
-                Debug.LogDebug("Triangulation time: " + sw.ElapsedMilliseconds + "ms");
-                Debug.LogDebug("Final vertices: " + mesh2d.Vertices.Count);
-
-                // Convert the 2D mesh to Unity mesh
-                terrainData.vertices = new List<Vector3>();
-                Dictionary<int, int> vertexIDs = new Dictionary<int, int>();
-                terrainData.uvs = new List<Vector2>();
-
-                foreach (ITriangle triangle in mesh2d.Triangles)
-                {
-                    int v0 = triangle.GetVertexID(0);
-                    int v1 = triangle.GetVertexID(1);
-                    int v2 = triangle.GetVertexID(2);
-
-                    if (!vertexIDs.ContainsKey(v0))
-                    {
-                        vertexIDs[v0] = terrainData.vertices.Count;
-                        terrainData.vertices.Add(triangle.GetVertex(0).ToVector3(1));
-                        terrainData.uvs.Add(triangle.GetVertex(0).UV);
-                    }
-                    if (!vertexIDs.ContainsKey(v1))
-                    {
-                        vertexIDs[v1] = terrainData.vertices.Count;
-                        terrainData.vertices.Add(triangle.GetVertex(1).ToVector3(1));
-                        terrainData.uvs.Add(triangle.GetVertex(1).UV);
-                    }
-                    if (!vertexIDs.ContainsKey(v2))
-                    {
-                        vertexIDs[v2] = terrainData.vertices.Count;
-                        terrainData.vertices.Add(triangle.GetVertex(2).ToVector3(1));
-                        terrainData.uvs.Add(triangle.GetVertex(2).UV);
-                    }
-
-                    if (config.carveHoles)
-                    {
-                        if (holeVertices.Contains(terrainData.vertices[vertexIDs[v0]]) ||
-                            holeVertices.Contains(terrainData.vertices[vertexIDs[v1]]) ||
-                            holeVertices.Contains(terrainData.vertices[vertexIDs[v2]]))
-                        {
-                            continue;
-                        }
-                    }
-
-                    terrainData.triangles.Add(vertexIDs[v0]);
-                    terrainData.triangles.Add(vertexIDs[v2]);
-                    terrainData.triangles.Add(vertexIDs[v1]);
-                }
             }
             else // Uniform meshing if no level bounds are set
             {
@@ -1235,16 +1459,14 @@ namespace TerraMesh
                 }
 
                 actualCellStep = Mathf.Max(minMeshStep, 1);
-                //Debug.LogDebug"Density Factor: " + actualCellStep);
 
                 // Calculate grid dimensions after applying density factor
-                int gridWidth = Mathf.FloorToInt(terrainData.heightmapResolution / actualCellStep);
-                int gridHeight = Mathf.FloorToInt(terrainData.heightmapResolution / actualCellStep);
+                int gridSize = Mathf.FloorToInt(terrainData.heightmapResolution / actualCellStep);
 
                 // Generate vertices
-                for (int z = 0; z <= gridHeight; z++)
+                for (int z = 0; z <= gridSize; z++)
                 {
-                    for (int x = 0; x <= gridWidth; x++)
+                    for (int x = 0; x <= gridSize; x++)
                     {
                         // Convert grid coordinates back to heightmap coordinates
                         int heightmapX = x * actualCellStep;
@@ -1256,60 +1478,155 @@ namespace TerraMesh
 
                         float height = terrainData.heightmapData[heightmapZ, heightmapX] * terrainData.terrainHeight; // TODO check if order z,x is correct here
                         Vector3 vertex = new Vector3(heightmapX * terrainData.terrainStepX, height, heightmapZ * terrainData.terrainStepZ);
-                        terrainData.vertices.Add(vertex);
+                        
+                        if (uniqueVertices.Add(vertex)) // Prevent duplicate vertices
+                        {
+                            terrainData.vertices.Add(vertex);
 
-                        Vector2 uv = new Vector2(heightmapX * terrainData.uvStepX, heightmapZ * terrainData.uvStepZ);
-                        terrainData.uvs.Add(uv);
+                            Vector2 uv = new Vector2(heightmapX * terrainData.uvStepX, heightmapZ * terrainData.uvStepZ);
+                            terrainData.uvs.Add(uv);
+
+                            if (config.carveHoles)
+                            {
+                                heightmapX = Mathf.Clamp(heightmapX, 0, terrainData.holesResolution - 1);
+                                heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
+
+                                // Check if the vertex is inside a terrain hole
+                                if (!terrainData.holesData[heightmapZ, heightmapX])
+                                {
+                                    holeVertices.Add(vertex);
+                                }
+                            }
+                        }
+
+                        
+                    }
+                }
+
+                sw.Stop();
+            }
+
+            Debug.LogDebug($"Sampled vertices: {terrainData.vertices.Count} Time: {sw.ElapsedMilliseconds}ms");
+
+            var polygon = new Polygon();
+
+            // Iterate in a loop over the perimeter of the terrain heightmap and add the edges to the polygon to prevent seams between terrain cells
+            for (int i = 0; i < terrainData.heightmapResolution - 1; i++)
+            {
+                for (int edgeInd = 0; edgeInd < 4; edgeInd++)
+                {
+                    // edgeInd = 0 - bottom, 1 - right, 2 - top, 3 - left
+                    // [0, 0] -> [1, 0] -> [1, 1] -> [1, 0] -> [0, 0]
+                    (int x, int z, int nextX, int nextZ) = edgeInd switch
+                    {
+                        0 => (i, 0, i + 1, 0),
+                        1 => (terrainData.heightmapResolution - 1, i, terrainData.heightmapResolution - 1, i + 1),
+                        2 => (i, terrainData.heightmapResolution - 1, i + 1, terrainData.heightmapResolution - 1),
+                        3 => (0, i, 0, i+1),
+                        _ => (0, 0, 0, 0)
+                    };
+
+                    float h1 = terrainData.heightmapData[z, x] * terrainData.terrainHeight;
+                    Vector3 v1 = new Vector3(x * terrainData.terrainStepX, h1, z * terrainData.terrainStepZ);
+                    Vector2 uv1 = new Vector2(x * terrainData.uvStepX, z * terrainData.uvStepZ);
+
+                    float h2 = terrainData.heightmapData[nextZ, nextX] * terrainData.terrainHeight;
+                    Vector3 v2 = new Vector3(nextX * terrainData.terrainStepX, h2, nextZ * terrainData.terrainStepZ);
+                    Vector2 uv2 = new Vector2(nextX * terrainData.uvStepX, nextZ * terrainData.uvStepZ);
+
+                    Vertex vert = v1.ToTriangleNetVertex(uv1, 1);
+                    Vertex nextVert = v2.ToTriangleNetVertex(uv2, 1);
+
+                    Segment outerEdge = new Segment(vert, nextVert);
+                    polygon.Add(outerEdge);
+
+                    UnityEngine.Debug.DrawLine(v1, v2, Color.red, 10);
+                    // Prevent duplicate vertices
+                    // We only check the first vertex of the edge since the second one will be considered on the next iteration
+                    if (uniqueVertices.Add(v1)) 
+                    {
+                        terrainData.vertices.Add(v1);
+                        terrainData.uvs.Add(uv1);
 
                         if (config.carveHoles)
                         {
-                            heightmapX = Mathf.Clamp(heightmapX, 0, terrainData.holesResolution - 1);
-                            heightmapZ = Mathf.Clamp(heightmapZ, 0, terrainData.holesResolution - 1);
+                            x = Mathf.Clamp(x, 0, terrainData.holesResolution - 1);
+                            z = Mathf.Clamp(z, 0, terrainData.holesResolution - 1);
 
                             // Check if the vertex is inside a terrain hole
-                            if (!terrainData.holesData[heightmapZ, heightmapX])
+                            if (!terrainData.holesData[z, x])
                             {
-                                holeVertices.Add(vertex);
+                                holeVertices.Add(v1);
                             }
                         }
                     }
                 }
-
-                Debug.LogDebug("Sampled vertices: " + terrainData.vertices.Count);
-
-                // Generate triangles using grid coordinates
-                for (int z = 0; z < gridHeight; z++)
-                {
-                    for (int x = 0; x < gridWidth; x++)
-                    {
-                        // Calculate vertex indices in the grid
-                        int vertexIndex = z * (gridWidth + 1) + x;
-
-                        if (config.carveHoles)
-                        {
-                            if (holeVertices.Contains(terrainData.vertices[vertexIndex]) ||
-                                holeVertices.Contains(terrainData.vertices[vertexIndex + 1]) ||
-                                holeVertices.Contains(terrainData.vertices[vertexIndex + (gridWidth + 1)]) ||
-                                holeVertices.Contains(terrainData.vertices[vertexIndex + (gridWidth + 1) + 1]))
-                            {
-                                continue;
-                            }
-                        }
-
-                        // First triangle
-                        terrainData.triangles.Add(vertexIndex);                     // Current vertex
-                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1));   // Vertex below
-                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
-
-                        // Second triangle
-                        terrainData.triangles.Add(vertexIndex);                     // Current vertex
-                        terrainData.triangles.Add(vertexIndex + (gridWidth + 1) + 1); // Vertex below and right
-                        terrainData.triangles.Add(vertexIndex + 1);                 // Vertex to the right
-                    }
-                }
-                sw.Stop();
-                Debug.LogDebug("Generated triangles: " + terrainData.triangles.Count + " Time: " + sw.ElapsedMilliseconds + "ms");
             }
+            
+            for (int i = 0; i < terrainData.vertices.Count; i++)
+            {
+                Vertex triNetVertex = terrainData.vertices[i].ToTriangleNetVertex(terrainData.uvs[i], 1);
+                polygon.Add(triNetVertex);
+            }
+
+            // Configure triangulation options
+            int maxAdditionalVertices = Mathf.Min(terrainData.vertices.Count / 4, 30000);
+            ConstraintOptions options = new ConstraintOptions() { ConformingDelaunay = false, SegmentSplitting = 2 };
+            QualityOptions quality = new QualityOptions() { MinimumAngle = 20.0f, SteinerPoints = config.refineMesh ? maxAdditionalVertices : 0 };
+
+            // Perform triangulation
+            sw.Restart();
+            var mesh2d = polygon.Triangulate(options, quality);
+            sw.Stop();
+            Debug.LogDebug("Triangulation time: " + sw.ElapsedMilliseconds + "ms");
+            Debug.LogDebug("Final vertices: " + mesh2d.Vertices.Count);
+
+            // Convert the 2D mesh to Unity mesh
+            terrainData.vertices = new List<Vector3>();
+            Dictionary<int, int> vertexIDs = new Dictionary<int, int>();
+            terrainData.uvs = new List<Vector2>();
+
+            foreach (ITriangle triangle in mesh2d.Triangles)
+            {
+                int v0 = triangle.GetVertexID(0);
+                int v1 = triangle.GetVertexID(1);
+                int v2 = triangle.GetVertexID(2);
+
+                if (!vertexIDs.ContainsKey(v0))
+                {
+                    vertexIDs[v0] = terrainData.vertices.Count;
+                    terrainData.vertices.Add(triangle.GetVertex(0).ToVector3(1));
+                    terrainData.uvs.Add(triangle.GetVertex(0).UV);
+                }
+                if (!vertexIDs.ContainsKey(v1))
+                {
+                    vertexIDs[v1] = terrainData.vertices.Count;
+                    terrainData.vertices.Add(triangle.GetVertex(1).ToVector3(1));
+                    terrainData.uvs.Add(triangle.GetVertex(1).UV);
+                }
+                if (!vertexIDs.ContainsKey(v2))
+                {
+                    vertexIDs[v2] = terrainData.vertices.Count;
+                    terrainData.vertices.Add(triangle.GetVertex(2).ToVector3(1));
+                    terrainData.uvs.Add(triangle.GetVertex(2).UV);
+                }
+
+                if (config.carveHoles)
+                {
+                    if (holeVertices.Contains(terrainData.vertices[vertexIDs[v0]]) ||
+                        holeVertices.Contains(terrainData.vertices[vertexIDs[v1]]) ||
+                        holeVertices.Contains(terrainData.vertices[vertexIDs[v2]]))
+                    {
+                        continue;
+                    }
+                }
+
+                terrainData.triangles.Add(vertexIDs[v0]);
+                terrainData.triangles.Add(vertexIDs[v2]);
+                terrainData.triangles.Add(vertexIDs[v1]);
+            }
+
+            Debug.LogDebug("Generated triangles: " + terrainData.triangles.Count);
         }
 
 #if UNITY_EDITOR

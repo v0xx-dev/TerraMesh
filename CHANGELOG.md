@@ -1,3 +1,13 @@
+## 1.1.7
+
+- Added terrain detail copying
+- Added a custom renderer for grass as an option (will require adding a dependency if used)
+- Added bulk terrain processing
+- Added tooltips for all options
+- Fixed incorrect adaptive mesh application
+- Changed UI slightly
+- For tiled terrains automatically stitches them at the edges
+
 ## 1.1.6
 
 - Fixed incorrect hole carving for non-adaptive algorithm

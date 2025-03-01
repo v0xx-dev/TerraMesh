@@ -179,5 +179,10 @@ namespace TriangleNet.Unity
                 Gizmos.DrawLine((Vector3) verts[2], (Vector3) verts[0]);	
             }
         }
+
+        public static float NextFloat(this System.Random random, float minValue, float maxValue)
+        {
+            return (float)random.NextDouble() * (maxValue - minValue) + minValue;
+        }
     }
 }

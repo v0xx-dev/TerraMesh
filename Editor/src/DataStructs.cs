@@ -149,6 +149,8 @@ namespace TerraMesh.Utils
         public bool useMeshCollider;
         public bool copyTrees;
         public bool copyDetail;
+        public bool useDetailInstancing;
+        public int detailInstancingBatchSize;
         public readonly Shader? terraMeshShader;
 
         /// <summary>
@@ -173,6 +175,8 @@ namespace TerraMesh.Utils
         /// <param name="useMeshCollider">Whether to use a MeshCollider for the mesh terrain.</param>
         /// <param name="copyTrees">Whether to copy trees to the mesh terrain.</param>
         /// <param name="copyDetail">Whether to copy detail objects to the mesh terrain. (basic implementation, bad results)</param>
+        /// <param name="useDetailInstancing">Whether to use detail instancing for the mesh terrain.</param>
+        /// <param name="detailInstancingBatchSize">The batch size for detail instancing.</param>
         /// <param name="terraMeshShader">The shader to use for the mesh terrain.</param>
         /// <remarks>
         /// The default shader is MeshTerrainLit.
@@ -196,6 +200,8 @@ namespace TerraMesh.Utils
                                 bool useMeshCollider = false,
                                 bool copyTrees = false,
                                 bool copyDetail = false,
+                                bool useDetailInstancing = false,
+                                int detailInstancingBatchSize = 1023,
                                 Shader? terraMeshShader = null)
         {
             this.levelBounds = levelBounds;
@@ -217,7 +223,9 @@ namespace TerraMesh.Utils
             this.useMeshCollider = useMeshCollider;
             this.copyTrees = copyTrees;
             this.copyDetail = copyDetail;
-            this.terraMeshShader = terraMeshShader == null ? TerraMeshPlugin.terraMeshShader : terraMeshShader;
+            this.useDetailInstancing = useDetailInstancing;
+            this.detailInstancingBatchSize = detailInstancingBatchSize;
+            this.terraMeshShader = terraMeshShader ?? TerraMeshPlugin.terraMeshShader;
 
             if (this.terraMeshShader == null)
             {
@@ -247,6 +255,8 @@ namespace TerraMesh.Utils
                 $"  useMeshCollider: {useMeshCollider}\n" +
                 $"  copyTrees: {copyTrees}\n" +
                 $"  copyDetail: {copyDetail}\n" +
+                $"  useDetailInstancing: {useDetailInstancing}\n" +
+                $"  detailInstancingBatchSize: {detailInstancingBatchSize}\n" +
                 $"  terraMeshShader: {terraMeshShader?.name ?? "null"}"; 
         }
     }
@@ -369,5 +379,15 @@ namespace TerraMesh.Utils
             $"  Terrain position: {terrainPosition}\n" +
             $"  Terrain bounds: {terrainBounds}";
         }
+    }
+
+    [Serializable]
+    public class InstancedDetailBatch
+    {
+        public Mesh mesh;
+        public Material material;
+        public Matrix4x4[] matrices;
+        public Bounds batchBounds;
+        public Vector3 Center => batchBounds.center;
     }
 }
