@@ -199,9 +199,8 @@ namespace TerraMesh
 
                         // Create subfolder if it doesn't exist
                         Directory.CreateDirectory(terrainFolderPath);
-
                         TerraMeshConfig config = new TerraMeshConfig(
-                            levelBounds: levelBounds?.bounds,
+                            levelBounds: levelBounds?.bounds ?? default,
                             useBounds: levelBounds != null,
                             useMeshCollider: useMeshCollider,
                             targetVertexCount: targetVertexCount,
