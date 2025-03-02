@@ -1,3 +1,9 @@
+## 1.2.0
+
+- Fixed some bugs with async processing
+- Fixed being unable to use uniform meshing
+- Added biplanar mapping option to the terrain shader (choose/adjust manually)
+
 ## 1.1.7
 
 - Added terrain detail copying
