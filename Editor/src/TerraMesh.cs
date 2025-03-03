@@ -1277,6 +1277,10 @@ namespace TerraMesh
             GameObject meshTerrain = new GameObject("MeshTerrain_" + terrain.name);
             MeshFilter meshFilter = meshTerrain.AddComponent<MeshFilter>();
             MeshRenderer meshRenderer = meshTerrain.AddComponent<MeshRenderer>();
+            // Copy terrain layers to a Lit material
+            Material terrainLitMaterial = new Material(config.terraMeshShader);
+            terrainLitMaterial.SetupMaterialFromTerrain(terrain);
+            meshRenderer.sharedMaterial = terrainLitMaterial;
             // Set same position, parent, rendering layer, rendering layer mask and tag as the terrain (and set the snow overlay custom pass layer)
             meshTerrain.transform.position = terrain.transform.position;
             meshTerrain.transform.SetParent(terrain.transform.parent ?? terrain.transform);
@@ -1295,7 +1299,6 @@ namespace TerraMesh
             }
 
             meshFilter.mesh = mesh;
-            meshRenderer.sharedMaterial = new Material(config.terraMeshShader);
 #if UNITY_EDITOR
             // Hide terrain object in editor
             terrain.gameObject.SetActive(false);
@@ -1789,20 +1792,25 @@ namespace TerraMesh
             }
 
             // Clear unused layers
-            for (int i = layerCount; i < 8; i++)
-            {
-                Texture2D emptyTex = Texture2D.blackTexture;
+            targetMaterial.ClearLitLayers(layerCount);
+        }
 
-                targetMaterial.SetTexture($"_Albedo_{i}", emptyTex);
-                targetMaterial.SetTexture($"_Normals_{i}", emptyTex);
-                targetMaterial.SetTexture($"_Mask_{i}", emptyTex);
-                targetMaterial.SetColor($"_Color_Tint_{i}", Vector4.zero);
-                targetMaterial.SetFloat($"_Normal_Scale_{i}", 0f);
-                targetMaterial.SetVector($"_Tiling_{i}", Vector2.one);
-                targetMaterial.SetVector($"_Offset_{i}", Vector2.zero);
-                targetMaterial.SetVector($"_Metallic_Remapping_{i}", new Vector2(0, 1));
-                targetMaterial.SetVector($"_AO_Remapping_{i}", new Vector2(0, 1));
-                targetMaterial.SetVector($"_Smoothness_Remapping_{i}", new Vector2(0, 1));
+        private static void ClearLitLayers(this Material terrainLitMaterial, int layerIndex = 0)
+        {
+            Texture2D emptyTex = Texture2D.blackTexture;
+
+            for (int i = layerIndex; i < 8; i++)
+            {
+                terrainLitMaterial.SetTexture($"_Albedo_{i}", emptyTex);
+                terrainLitMaterial.SetTexture($"_Normals_{i}", emptyTex);
+                terrainLitMaterial.SetTexture($"_Mask_{i}", emptyTex);
+                terrainLitMaterial.SetColor($"_Color_Tint_{i}", Vector4.zero);
+                terrainLitMaterial.SetFloat($"_Normal_Scale_{i}", 0f);
+                terrainLitMaterial.SetVector($"_Tiling_{i}", Vector2.one);
+                terrainLitMaterial.SetVector($"_Offset_{i}", Vector2.zero);
+                terrainLitMaterial.SetVector($"_Metallic_Remapping_{i}", new Vector2(0, 1));
+                terrainLitMaterial.SetVector($"_AO_Remapping_{i}", new Vector2(0, 1));
+                terrainLitMaterial.SetVector($"_Smoothness_Remapping_{i}", new Vector2(0, 1));
             }
         }
     }

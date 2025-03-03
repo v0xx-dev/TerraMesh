@@ -1,6 +1,6 @@
 ## 1.2.0
 
-- Fixed some bugs with async processing
+- Made async processing thread safe
 - Fixed being unable to use uniform meshing
 - Added biplanar mapping option to the terrain shader (choose/adjust manually)
 
