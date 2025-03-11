@@ -1,3 +1,7 @@
+## 1.2.1
+
+- Fixed metadata
+
 ## 1.2.0
 
 - Made async processing thread safe
